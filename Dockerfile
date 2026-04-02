@@ -7,4 +7,5 @@ RUN pip3 install --no-cache-dir -U -r requirements.txt
 COPY . .
 EXPOSE 7860
 
-CMD flask run -h 0.0.0.0 -p 7860 & python3 main.py
+# CMD ko change karke yeh laga do
+CMD python3 app.py & python3 main.py
