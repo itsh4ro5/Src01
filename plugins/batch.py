@@ -1,13 +1,10 @@
-# Copyright (c) 2025 devgagan : https://github.com/devgaganin.  
-# Licensed under the GNU General Public License v3.0.  
-# See LICENSE file in the repository root for full license text.
-
-import os, re, time, asyncio, json, asyncio 
+import os, re, time, asyncio, json
+import random
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import UserNotParticipant
 from config import API_ID, API_HASH, LOG_GROUP, STRING, FORCE_SUB, FREEMIUM_LIMIT, PREMIUM_LIMIT
-from utils.func import get_user_data, screenshot, thumbnail, get_video_metadata
+from utils.func import get_user_data, screenshot, thumbnail, get_video_metadata, IS_PAUSED
 from utils.func import get_user_data_key, process_text_with_rules, is_premium_user, E
 from shared_client import app as X
 from plugins.settings import rename_file
@@ -15,7 +12,6 @@ from plugins.start import subscribe as sub
 from utils.custom_filters import login_in_progress
 from utils.encrypt import dcs
 from typing import Dict, Any, Optional
-
 
 Y = None if not STRING else __import__('shared_client').userbot
 Z, P, UB, UC, emp = {}, {}, {}, {}, {}
@@ -85,7 +81,6 @@ async def upd_dlg(c):
         print(f'Failed to update dialogs: {e}')
         return False
 
-# fixed the old group of 2021-2022 extraction 🌝 (buy krne ka fayda nhi ab old group) ✅ 
 async def get_msg(c, u, i, d, lt):
     try:
         if lt == 'public':
@@ -118,11 +113,9 @@ async def get_msg(c, u, i, d, lt):
                 try:
                     async for _ in u.get_dialogs(limit=50): pass
                     
-                    # Try with -100 prefix first
                     if str(i).startswith('-100'):
                         chat_id_100 = i
-                        # For - prefix, remove -100 and add just -
-                        base_id = str(i)[4:]  # Remove -100
+                        base_id = str(i)[4:]  
                         chat_id_dash = f"-{base_id}"
                     elif i.isdigit():
                         chat_id_100 = f"-100{i}"
@@ -131,7 +124,6 @@ async def get_msg(c, u, i, d, lt):
                         chat_id_100 = i
                         chat_id_dash = i
                     
-                    # Try -100 format first
                     try:
                         result = await u.get_messages(chat_id_100, d)
                         if result and not getattr(result, "empty", False):
@@ -139,7 +131,6 @@ async def get_msg(c, u, i, d, lt):
                     except Exception:
                         pass
                     
-                    # Try - format second
                     try:
                         result = await u.get_messages(chat_id_dash, d)
                         if result and not getattr(result, "empty", False):
@@ -147,7 +138,6 @@ async def get_msg(c, u, i, d, lt):
                     except Exception:
                         pass
                     
-                    # Final fallback - refresh dialogs and try original
                     try:
                         async for _ in u.get_dialogs(limit=200): pass
                         result = await u.get_messages(i, d)
@@ -165,7 +155,6 @@ async def get_msg(c, u, i, d, lt):
     except Exception as e:
         print(f'Error fetching message: {e}')
         return None
-
 
 async def get_ubot(uid):
     bt = await get_user_data_key(uid, "bot_token", None)
@@ -266,23 +255,31 @@ async def process_msg(c, u, m, d, lt, uid, i):
             p = await c.send_message(d, 'Downloading...')
 
             c_name = f"{time.time()}"
+            original_ext = ""
+            
             if m.video:
                 file_name = m.video.file_name
+                original_ext = ".mp4"
                 if not file_name:
                     file_name = f"{time.time()}.mp4"
-                    c_name = sanitize(file_name)
+                c_name = sanitize(file_name)
             elif m.audio:
                 file_name = m.audio.file_name
+                original_ext = ".mp3"
                 if not file_name:
                     file_name = f"{time.time()}.mp3"
-                    c_name = sanitize(file_name)
+                c_name = sanitize(file_name)
             elif m.document:
                 file_name = m.document.file_name
-                if not file_name:
-                    file_name = f"{time.time()}"
-                    c_name = sanitize(file_name)
+                if file_name:
+                    original_ext = os.path.splitext(file_name)[1].lower()
+                else:
+                    original_ext = ".pdf" 
+                    file_name = f"{time.time()}{original_ext}"
+                c_name = sanitize(file_name)
             elif m.photo:
                 file_name = f"{time.time()}.jpg"
+                original_ext = ".jpg"
                 c_name = sanitize(file_name)
     
             f = await u.download_media(m, file_name=c_name, progress=prog, progress_args=(c, d, p.id, st))
@@ -292,12 +289,15 @@ async def process_msg(c, u, m, d, lt, uid, i):
                 return 'Failed.'
             
             await c.edit_message_text(d, p.id, 'Renaming...')
-            if (
-                (m.video and m.video.file_name) or
-                (m.audio and m.audio.file_name) or
-                (m.document and m.document.file_name)
-            ):
-                f = await rename_file(f, d, p)
+            
+            if (m.video and m.video.file_name) or (m.audio and m.audio.file_name) or (m.document and m.document.file_name):
+                renamed_f = await rename_file(f, d, p)
+                if original_ext and not renamed_f.lower().endswith(original_ext):
+                    corrected_name = renamed_f + original_ext
+                    os.rename(renamed_f, corrected_name)
+                    f = corrected_name
+                else:
+                    f = renamed_f
             
             fsize = os.path.getsize(f) / (1024 * 1024 * 1024)
             th = thumbnail(d)
@@ -341,7 +341,12 @@ async def process_msg(c, u, m, d, lt, uid, i):
                 video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.ogv']
                 audio_extensions = ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.aiff', '.ac3']
                 file_ext = os.path.splitext(f)[1].lower()
-                if m.video or (m.document and file_ext in video_extensions):
+                
+                if file_ext in ['.pdf', '.zip', '.rar', '.txt', '.doc', '.docx', '.apk', '.epub', '.py']:
+                    await c.send_document(tcid, document=f, caption=ft if m.caption else None, 
+                                        progress=prog, progress_args=(c, d, p.id, st), 
+                                        reply_to_message_id=rtmid)
+                elif m.video or file_ext in video_extensions:
                     mtd = await get_video_metadata(f)
                     dur, h, w = mtd['duration'], mtd['width'], mtd['height']
                     th = await screenshot(f, dur, d)
@@ -357,7 +362,7 @@ async def process_msg(c, u, m, d, lt, uid, i):
                                     reply_to_message_id=rtmid)
                 elif m.sticker:
                     await c.send_sticker(tcid, m.sticker.file_id, reply_to_message_id=rtmid)
-                elif m.audio or (m.document and file_ext in audio_extensions):
+                elif m.audio or file_ext in audio_extensions:
                     await c.send_audio(tcid, audio=f, caption=ft if m.caption else None, 
                                     thumb=th, progress=prog, progress_args=(c, d, p.id, st), 
                                     reply_to_message_id=rtmid)
@@ -365,10 +370,6 @@ async def process_msg(c, u, m, d, lt, uid, i):
                     await c.send_photo(tcid, photo=f, caption=ft if m.caption else None, 
                                     progress=prog, progress_args=(c, d, p.id, st), 
                                     reply_to_message_id=rtmid)
-                elif m.document:
-                    await c.send_document(tcid, document=f, caption=ft if m.caption else None, 
-                                        progress=prog, progress_args=(c, d, p.id, st), 
-                                        reply_to_message_id=rtmid)
                 else:
                     await c.send_document(tcid, document=f, caption=ft if m.caption else None, 
                                         progress=prog, progress_args=(c, d, p.id, st), 
@@ -433,7 +434,7 @@ async def text_handler(c, m):
     s = Z[uid].get('step')
     x = await get_ubot(uid)
     if not x:
-        await message.reply("Add your bot /setbot `token`")
+        await m.reply("Add your bot /setbot `token`")
         return
 
     if s == 'start':
@@ -526,12 +527,9 @@ async def text_handler(c, m):
             })
         
         try:
-            from utils.func import IS_PAUSED
-            import random
-            
             for j in range(n):
                 
-                # Agar bot human-break par hai, to yahan hold karega
+                # HUMAN SLEEP CHECK: Bot 3hr ke baad 20min aaram karega
                 while IS_PAUSED:
                     try: await pt.edit('Taking a human-like break... Paused for ~20 mins.')
                     except: pass
@@ -557,7 +555,7 @@ async def text_handler(c, m):
                     try: await pt.edit(f'{j+1}/{n}: Error - {str(e)[:30]}')
                     except: pass
                 
-                # HUMAN DELAY: 17.5 se 35.8 seconds ka random decimal delay (Safe from FloodWait)
+                # ACCOUNT SAFETY DELAY: 17s se 35s ka delay taaki API Ban (FloodWait) na aaye
                 delay_time = random.uniform(17.5, 35.8)
                 try: await pt.edit(f'Sleeping for {delay_time:.2f}s to act like human & prevent ban...')
                 except: pass
