@@ -1,6 +1,3 @@
-# Copyright (c) 2025 devgagan : https://github.com/devgaganin.  
-# Licensed under the GNU General Public License v3.0.  
-
 import asyncio
 from shared_client import start_client, app
 import importlib
