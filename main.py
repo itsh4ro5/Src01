@@ -2,12 +2,13 @@
 # Licensed under the GNU General Public License v3.0.  
 
 import asyncio
-from shared_client import start_client
+from shared_client import start_client, app
 import importlib
 import os
 import sys
 import random
 import utils.func as global_state
+from pyrogram.types import BotCommand  # Command menu ke liye import kiya hai
 
 async def human_behavior_routine():
     while True:
@@ -36,9 +37,28 @@ async def load_and_run_plugins():
             print(f"Running {plugin} plugin...")
             await getattr(module, f"run_{plugin}_plugin")()  
 
+# 🟢 BOT MENU COMMANDS SETUP FUNCTION
+async def setup_bot_commands():
+    try:
+        await app.set_bot_commands([
+            BotCommand("start", "Start the bot & check status"),
+            BotCommand("login", "Login to save private restricted content"),
+            BotCommand("logout", "Logout from your current session"),
+            BotCommand("batch", "Extract multiple restricted messages"),
+            BotCommand("single", "Extract a single restricted message"),
+            BotCommand("dl", "Download video from YouTube/Insta/etc"),
+            BotCommand("adl", "Download audio from YouTube/Insta/etc"),
+            BotCommand("cancel", "Cancel the currently active batch task"),
+            BotCommand("setbot", "Set your custom bot token (e.g., /setbot <token>)"),
+            BotCommand("rembot", "Remove your custom bot token")
+        ])
+        print("✅ Bot command menu set successfully!")
+    except Exception as e:
+        print(f"⚠️ Failed to set bot commands: {e}")
+
 async def main():
     await load_and_run_plugins()
-    # Start the human behavior sleep cycle in background
+    await setup_bot_commands()  # Yahan command menu setup ko call kiya gaya hai
     asyncio.create_task(human_behavior_routine())
     while True:
         await asyncio.sleep(1)  
