@@ -115,8 +115,15 @@ async def handle_login_steps(client, message):
                 return
             await edit_message_safely(status_msg,
                 '🔄 Processing phone number...')
-            temp_client = Client(f'temp_{user_id}', api_id=API_ID, api_hash
-                =API_HASH, device_model=model, in_memory=True)
+            temp_client = Client(
+                f'temp_{user_id}', 
+                api_id=API_ID, 
+                api_hash=API_HASH, 
+                in_memory=True,
+                device_model="Android",
+                system_version="13.0",
+                app_version="10.14.5"
+            )
             try:
                 await temp_client.connect()
                 
