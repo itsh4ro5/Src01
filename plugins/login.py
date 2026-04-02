@@ -14,7 +14,11 @@ from utils.custom_filters import login_in_progress, set_user_step, get_user_step
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-model = "v3saver Team SPY"
+
+# Aapke main.py wala exact device spoofing parameters
+DEVICE_MODEL = "realme P3 Pro 5G"
+SYSTEM_VERSION = "Android 14"
+APP_VERSION = "12.5.2"
 
 STEP_PHONE = 1
 STEP_CODE = 2
@@ -29,7 +33,7 @@ async def login_command(client, message):
     await message.delete()
     status_msg = await message.reply(
         """Please send your phone number with country code
-Example: `+12345678900`"""
+Example: `+916205730972`"""
         )
     login_cache[user_id] = {'status_msg': status_msg}
     
@@ -42,7 +46,7 @@ async def set_bot_token(C, m):
         try:
             await UB[user_id].stop()
             if UB.get(user_id, None):
-                del UB[user_id]  # Remove from dictionary
+                del UB[user_id] 
                 
             try:
                 if os.path.exists(f"user_{user_id}.session"):
@@ -53,7 +57,7 @@ async def set_bot_token(C, m):
             print(f"Stopped and removed old bot for user {user_id}")
         except Exception as e:
             print(f"Error stopping old bot for user {user_id}: {e}")
-            del UB[user_id]  # Remove from dictionary
+            del UB[user_id] 
 
     if len(args) < 2:
         await m.reply_text("⚠️ Please provide a bot token. Usage: `/setbot token`", quote=True)
@@ -72,7 +76,7 @@ async def rem_bot_token(C, m):
             await UB[user_id].stop()
             
             if UB.get(user_id, None):
-                del UB[user_id]  # Remove from dictionary # Remove from dictionary
+                del UB[user_id] 
             print(f"Stopped and removed old bot for user {user_id}")
             try:
                 if os.path.exists(f"user_{user_id}.session"):
@@ -82,7 +86,7 @@ async def rem_bot_token(C, m):
         except Exception as e:
             print(f"Error stopping old bot for user {user_id}: {e}")
             if UB.get(user_id, None):
-                del UB[user_id]  # Remove from dictionary  # Remove from dictionary
+                del UB[user_id] 
             try:
                 if os.path.exists(f"user_{user_id}.session"):
                     os.remove(f"user_{user_id}.session")
@@ -115,19 +119,23 @@ async def handle_login_steps(client, message):
                 return
             await edit_message_safely(status_msg,
                 '🔄 Processing phone number...')
+            
+            # AAPKE MAIN.PY WALA METHOD YAHAN ADD KIYA GAYA HAI
             temp_client = Client(
                 f'temp_{user_id}', 
                 api_id=API_ID, 
                 api_hash=API_HASH, 
                 in_memory=True,
-                device_model="Android",
-                system_version="13.0",
-                app_version="10.14.5"
+                device_model=DEVICE_MODEL,
+                system_version=SYSTEM_VERSION,
+                app_version=APP_VERSION,
+                sleep_threshold=120
             )
+            
             try:
                 await temp_client.connect()
                 
-                # API Limit bachane ke liye decimal sleep (Human behavior)
+                # Human behavior delay
                 await asyncio.sleep(random.uniform(2.3, 4.8)) 
                 
                 sent_code = await temp_client.send_code(text)
@@ -156,7 +164,6 @@ Please try again with /login.""")
             try:
                 await edit_message_safely(status_msg, '🔄 Verifying code...')
                 
-                # Sign in karte waqt thoda decimal wait (Human behavior)
                 await asyncio.sleep(random.uniform(3.1, 5.7))
                 
                 await temp_client.sign_in(phone, phone_code_hash, code)
@@ -190,7 +197,6 @@ Please enter your password:"""
                 await edit_message_safely(status_msg, '🔄 Verifying password...'
                     )
                     
-                # Password check me bhi decimal delay (Human behavior)
                 await asyncio.sleep(random.uniform(2.5, 4.2))
                 
                 await temp_client.check_password(text)
@@ -263,8 +269,17 @@ async def logout_command(client, message):
             return
         encss = session_data['session_string']
         session_string = dcs(encss)
-        temp_client = Client(f'temp_logout_{user_id}', api_id=API_ID,
-            api_hash=API_HASH, session_string=session_string)
+        
+        temp_client = Client(
+            f'temp_logout_{user_id}', 
+            api_id=API_ID,
+            api_hash=API_HASH, 
+            session_string=session_string,
+            device_model=DEVICE_MODEL,
+            system_version=SYSTEM_VERSION,
+            app_version=APP_VERSION
+        )
+        
         try:
             await temp_client.connect()
             await temp_client.log_out()
