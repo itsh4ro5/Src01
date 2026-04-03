@@ -4,7 +4,7 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import UserNotParticipant
 from config import API_ID, API_HASH, LOG_GROUP, STRING, FORCE_SUB, FREEMIUM_LIMIT, PREMIUM_LIMIT
-from utils.func import get_user_data, screenshot, thumbnail, get_video_metadata, IS_PAUSED
+from utils.func import get_user_data, screenshot, thumbnail, get_video_metadata, IS_PAUSED, save_user_data
 from utils.func import get_user_data_key, process_text_with_rules, is_premium_user, E
 from shared_client import app as X
 from plugins.settings import rename_file
@@ -19,7 +19,6 @@ Z, P, UB, UC, emp = {}, {}, {}, {}, {}
 ACTIVE_USERS = {}
 ACTIVE_USERS_FILE = "active_users.json"
 
-# fixed directory file_name problems 
 def sanitize(filename):
     return re.sub(r'[<>:"/\\|?*\']', '_', filename).strip(" .")[:255]
 
@@ -251,6 +250,38 @@ async def process_msg(c, u, m, d, lt, uid, i):
                 await send_direct(c, m, tcid, ft, rtmid)
                 return 'Sent directly.'
             
+            # 🟢 FAST FORWARD LOGIC (No 'Forwarded From' tag & Custom Caption Applied)
+            forward_mode = await get_user_data_key(uid, "forward_mode", False)
+            if forward_mode:
+                try:
+                    if lt == 'public':
+                        await c.copy_message(
+                            chat_id=tcid,
+                            from_chat_id=m.chat.id,
+                            message_id=m.id,
+                            caption=ft if ft else None,  # Custom caption yahan set kiya gaya hai
+                            reply_to_message_id=rtmid
+                        )
+                        return 'Fast Forwarded ✅'
+                    else:
+                        temp_msg = await u.copy_message(
+                            chat_id=LOG_GROUP,
+                            from_chat_id=m.chat.id,
+                            message_id=m.id
+                        )
+                        await c.copy_message(
+                            chat_id=tcid,
+                            from_chat_id=LOG_GROUP,
+                            message_id=temp_msg.id,
+                            caption=ft if ft else None,  # Custom caption yahan set kiya gaya hai
+                            reply_to_message_id=rtmid
+                        )
+                        await c.delete_messages(LOG_GROUP, temp_msg.id)
+                        return 'Fast Forwarded ✅'
+                except Exception as e:
+                    print(f"Fast forward failed, fallback to normal download: {e}")
+                    pass 
+            
             st = time.time()
             p = await c.send_message(d, 'Downloading...')
 
@@ -385,7 +416,13 @@ async def process_msg(c, u, m, d, lt, uid, i):
             return 'Done.'
             
         elif m.text:
-            await c.send_message(tcid, text=m.text.markdown, reply_to_message_id=rtmid)
+            # TEXT messages me bhi custom caption logic and replace words
+            orig_text = m.text.markdown
+            proc_text = await process_text_with_rules(d, orig_text)
+            user_cap = await get_user_data_key(d, 'caption', '')
+            ft = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
+            
+            await c.send_message(tcid, text=ft if ft else orig_text, reply_to_message_id=rtmid)
             return 'Sent.'
     except Exception as e:
         return f'Error: {str(e)[:50]}'
@@ -425,9 +462,21 @@ async def cancel_cmd(c, m):
     else:
         await m.reply_text('No active batch process found.')
 
+@X.on_message(filters.command("forward"))
+async def toggle_forward(c, m):
+    uid = m.from_user.id
+    current_status = await get_user_data_key(uid, "forward_mode", False)
+    new_status = not current_status
+    await save_user_data(uid, "forward_mode", new_status)
+    
+    if new_status:
+        await m.reply_text("✅ **Fast Forward Mode ON**\n\nAb jin channels me forward ON (unrestricted) hoga, wahan bot bina download/upload kiye files ko seedha clone karega. \n\n⚡ **Fayda:** 100x Fast speed aur aapka set kiya hua custom caption apply hoga (bina kisi Forward Tag ke)!")
+    else:
+        await m.reply_text("❌ **Fast Forward Mode OFF**\n\nAb bot sabhi files ko hamesha pehle download karega aur phir upload karega.")
+
 @X.on_message(filters.text & filters.private & ~login_in_progress & ~filters.command([
     'start', 'batch', 'cancel', 'login', 'logout', 'stop', 'set', 
-    'pay', 'redeem', 'gencode', 'single', 'generate', 'keyinfo', 'encrypt', 'decrypt', 'keys', 'setbot', 'rembot']))
+    'pay', 'redeem', 'gencode', 'single', 'generate', 'keyinfo', 'encrypt', 'decrypt', 'keys', 'setbot', 'rembot', 'forward']))
 async def text_handler(c, m):
     uid = m.from_user.id
     if uid not in Z: return
@@ -529,7 +578,6 @@ async def text_handler(c, m):
         try:
             for j in range(n):
                 
-                # HUMAN SLEEP CHECK: Bot 3hr ke baad 20min aaram karega
                 while IS_PAUSED:
                     try: await pt.edit('Taking a human-like break... Paused for ~20 mins.')
                     except: pass
@@ -547,7 +595,7 @@ async def text_handler(c, m):
                     msg = await get_msg(ubot, uc, i, mid, lt)
                     if msg:
                         res = await process_msg(ubot, uc, msg, str(m.chat.id), lt, uid, i)
-                        if 'Done' in res or 'Copied' in res or 'Sent' in res:
+                        if 'Done' in res or 'Copied' in res or 'Sent' in res or 'Forwarded' in res:
                             success += 1
                     else:
                         pass
@@ -555,7 +603,6 @@ async def text_handler(c, m):
                     try: await pt.edit(f'{j+1}/{n}: Error - {str(e)[:30]}')
                     except: pass
                 
-                # ACCOUNT SAFETY DELAY: 17s se 35s ka delay taaki API Ban (FloodWait) na aaye
                 delay_time = random.uniform(17.5, 35.8)
                 try: await pt.edit(f'Sleeping for {delay_time:.2f}s to act like human & prevent ban...')
                 except: pass
