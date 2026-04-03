@@ -4,37 +4,24 @@ import importlib
 import os
 import sys
 import random
+import time
 import utils.func as global_state
-from pyrogram.types import BotCommand  # Command menu ke liye import kiya hai
+from pyrogram.types import BotCommand  
 
 async def human_behavior_routine():
     while True:
-        # Lagbhag 3 ghante (10500 se 11000 seconds) tak active rahega
         active_time = random.uniform(10500.5, 11000.2)
         await asyncio.sleep(active_time)
         
         print("Taking a ~20-minute human-like break to prevent bans...")
         global_state.IS_PAUSED = True
         
-        # Lagbhag 20 mins (1150 se 1250 seconds) ka decimal random break
         sleep_time = random.uniform(1150.7, 1250.3)
         await asyncio.sleep(sleep_time)
         
         print("Waking up from break...")
         global_state.IS_PAUSED = False
 
-async def load_and_run_plugins():
-    await start_client()
-    plugin_dir = "plugins"
-    plugins = [f[:-3] for f in os.listdir(plugin_dir) if f.endswith(".py") and f != "__init__.py"]
-
-    for plugin in plugins:
-        module = importlib.import_module(f"plugins.{plugin}")
-        if hasattr(module, f"run_{plugin}_plugin"):
-            print(f"Running {plugin} plugin...")
-            await getattr(module, f"run_{plugin}_plugin")()  
-
-# 🟢 BOT MENU COMMANDS SETUP FUNCTION
 async def setup_bot_commands():
     try:
         await app.set_bot_commands([
@@ -45,17 +32,33 @@ async def setup_bot_commands():
             BotCommand("single", "Extract a single restricted message"),
             BotCommand("dl", "Download video from YouTube/Insta/etc"),
             BotCommand("adl", "Download audio from YouTube/Insta/etc"),
+            BotCommand("forward", "Toggle Fast Forward Mode (No Download)"), # 🟢 NEW COMMAND
             BotCommand("cancel", "Cancel the currently active batch task"),
-            BotCommand("setbot", "Set your custom bot token (e.g., /setbot <token>)"),
+            BotCommand("setbot", "Set your custom bot token"),
             BotCommand("rembot", "Remove your custom bot token")
         ])
         print("✅ Bot command menu set successfully!")
     except Exception as e:
         print(f"⚠️ Failed to set bot commands: {e}")
 
+async def load_and_run_plugins():
+    try:
+        await start_client()
+    except Exception as e:
+        print(f"Error during client start: {e}")
+        
+    plugin_dir = "plugins"
+    plugins = [f[:-3] for f in os.listdir(plugin_dir) if f.endswith(".py") and f != "__init__.py"]
+
+    for plugin in plugins:
+        module = importlib.import_module(f"plugins.{plugin}")
+        if hasattr(module, f"run_{plugin}_plugin"):
+            print(f"Running {plugin} plugin...")
+            await getattr(module, f"run_{plugin}_plugin")()  
+
 async def main():
     await load_and_run_plugins()
-    await setup_bot_commands()  # Yahan command menu setup ko call kiya gaya hai
+    await setup_bot_commands()  
     asyncio.create_task(human_behavior_routine())
     while True:
         await asyncio.sleep(1)  
@@ -68,7 +71,10 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("Shutting down...")
     except Exception as e:
-        print(e)
+        print(f"⚠️ CRITICAL ERROR: {e}")
+        print("⏳ Bot is facing a FloodWait or Server Ban. Sleeping for 15 Minutes to clear limits...")
+        time.sleep(900)  
+        print("🔄 Restarting now...")
         sys.exit(1)
     finally:
         try:
