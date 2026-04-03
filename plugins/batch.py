@@ -1,3 +1,7 @@
+# Copyright (c) 2025 devgagan : https://github.com/devgaganin.  
+# Licensed under the GNU General Public License v3.0.  
+# See LICENSE file in the repository root for full license text.
+
 import os, re, time, asyncio, json
 import random
 from pyrogram import Client, filters
@@ -250,40 +254,38 @@ async def process_msg(c, u, m, d, lt, uid, i):
                 await send_direct(c, m, tcid, ft, rtmid)
                 return 'Sent directly.'
             
-            # 🟢 FAST FORWARD LOGIC (No 'Forwarded From' tag & Custom Caption Applied)
+            # Status initialize
+            p = await c.send_message(d, '⏳ Initializing...')
+            
+            # 🟢 FAST FORWARD LOGIC (Smart Bridge with Error Catching)
             forward_mode = await get_user_data_key(uid, "forward_mode", False)
             if forward_mode:
                 try:
-                    if lt == 'public':
-                        await c.copy_message(
-                            chat_id=tcid,
-                            from_chat_id=m.chat.id,
-                            message_id=m.id,
-                            caption=ft if ft else None,  # Custom caption yahan set kiya gaya hai
-                            reply_to_message_id=rtmid
-                        )
-                        return 'Fast Forwarded ✅'
-                    else:
-                        temp_msg = await u.copy_message(
-                            chat_id=LOG_GROUP,
-                            from_chat_id=m.chat.id,
-                            message_id=m.id
-                        )
-                        await c.copy_message(
-                            chat_id=tcid,
-                            from_chat_id=LOG_GROUP,
-                            message_id=temp_msg.id,
-                            caption=ft if ft else None,  # Custom caption yahan set kiya gaya hai
-                            reply_to_message_id=rtmid
-                        )
-                        await c.delete_messages(LOG_GROUP, temp_msg.id)
-                        return 'Fast Forwarded ✅'
+                    # 1. Message apne khud ke context se LOG_GROUP me copy hoga (No ChatIdInvalid Error)
+                    temp_msg = await m.copy(LOG_GROUP)
+                    
+                    # 2. Bot (c) LOG_GROUP se utha kar final destination par bhej dega (Custom Caption ke sath)
+                    await c.copy_message(
+                        chat_id=tcid,
+                        from_chat_id=LOG_GROUP,
+                        message_id=temp_msg.id,
+                        caption=ft if ft else None,
+                        reply_to_message_id=rtmid
+                    )
+                    
+                    # 3. Kachra saaf (Cleanup)
+                    await temp_msg.delete()
+                    await c.delete_messages(d, p.id)
+                    return 'Fast Forwarded ✅'
                 except Exception as e:
-                    print(f"Fast forward failed, fallback to normal download: {e}")
+                    print(f"Fast forward failed: {e}")
+                    # YAHAN ERROR EXACTLY SCREEN PAR DIKHEGA ⚠️
+                    await c.edit_message_text(d, p.id, f"⚠️ **Fast-Forward Error:** `{str(e)}`\n\n🔄 Fallback: Downloading instead...")
+                    await asyncio.sleep(2.5) 
                     pass 
             
             st = time.time()
-            p = await c.send_message(d, 'Downloading...')
+            await c.edit_message_text(d, p.id, '⬇️ Downloading...')
 
             c_name = f"{time.time()}"
             original_ext = ""
@@ -416,7 +418,6 @@ async def process_msg(c, u, m, d, lt, uid, i):
             return 'Done.'
             
         elif m.text:
-            # TEXT messages me bhi custom caption logic and replace words
             orig_text = m.text.markdown
             proc_text = await process_text_with_rules(d, orig_text)
             user_cap = await get_user_data_key(d, 'caption', '')
@@ -479,7 +480,13 @@ async def toggle_forward(c, m):
     'pay', 'redeem', 'gencode', 'single', 'generate', 'keyinfo', 'encrypt', 'decrypt', 'keys', 'setbot', 'rembot', 'forward']))
 async def text_handler(c, m):
     uid = m.from_user.id
-    if uid not in Z: return
+    
+    if uid not in Z:
+        if m.text and ("t.me/" in m.text or "telegram.me/" in m.text):
+            Z[uid] = {'step': 'start_single'}
+        else:
+            return
+            
     s = Z[uid].get('step')
     x = await get_ubot(uid)
     if not x:
