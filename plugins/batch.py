@@ -2,7 +2,7 @@
 # Licensed under the GNU General Public License v3.0.  
 # See LICENSE file in the repository root for full license text.
 
-import os, re, time, asyncio, json
+import os, re, time, asyncio, json, logging
 import random
 from pyrogram import Client, filters
 from pyrogram.types import Message
@@ -17,12 +17,16 @@ from utils.custom_filters import login_in_progress
 from utils.encrypt import dcs
 from typing import Dict, Any, Optional
 
+# 🟢 15-Seconds Pyrogram Warning Disabled
+logging.getLogger("pyrogram.session.session").setLevel(logging.ERROR)
+
 Y = None if not STRING else __import__('shared_client').userbot
 Z, P, UB, UC, emp = {}, {}, {}, {}, {}
 
 ACTIVE_USERS = {}
 ACTIVE_USERS_FILE = "active_users.json"
 
+# fixed directory file_name problems 
 def sanitize(filename):
     return re.sub(r'[<>:"/\\|?*\']', '_', filename).strip(" .")[:255]
 
@@ -84,6 +88,7 @@ async def upd_dlg(c):
         print(f'Failed to update dialogs: {e}')
         return False
 
+# fixed the old group of 2021-2022 extraction 🌝 (buy krne ka fayda nhi ab old group) ✅ 
 async def get_msg(c, u, i, d, lt):
     try:
         if lt == 'public':
@@ -116,9 +121,11 @@ async def get_msg(c, u, i, d, lt):
                 try:
                     async for _ in u.get_dialogs(limit=50): pass
                     
+                    # Try with -100 prefix first
                     if str(i).startswith('-100'):
                         chat_id_100 = i
-                        base_id = str(i)[4:]  
+                        # For - prefix, remove -100 and add just -
+                        base_id = str(i)[4:]  # Remove -100
                         chat_id_dash = f"-{base_id}"
                     elif i.isdigit():
                         chat_id_100 = f"-100{i}"
@@ -127,6 +134,7 @@ async def get_msg(c, u, i, d, lt):
                         chat_id_100 = i
                         chat_id_dash = i
                     
+                    # Try -100 format first
                     try:
                         result = await u.get_messages(chat_id_100, d)
                         if result and not getattr(result, "empty", False):
@@ -134,6 +142,7 @@ async def get_msg(c, u, i, d, lt):
                     except Exception:
                         pass
                     
+                    # Try - format second
                     try:
                         result = await u.get_messages(chat_id_dash, d)
                         if result and not getattr(result, "empty", False):
@@ -141,6 +150,7 @@ async def get_msg(c, u, i, d, lt):
                     except Exception:
                         pass
                     
+                    # Final fallback - refresh dialogs and try original
                     try:
                         async for _ in u.get_dialogs(limit=200): pass
                         result = await u.get_messages(i, d)
@@ -158,6 +168,7 @@ async def get_msg(c, u, i, d, lt):
     except Exception as e:
         print(f'Error fetching message: {e}')
         return None
+
 
 async def get_ubot(uid):
     bt = await get_user_data_key(uid, "bot_token", None)
@@ -257,24 +268,18 @@ async def process_msg(c, u, m, d, lt, uid, i):
             # Status initialize
             p = await c.send_message(d, '⏳ Initializing...')
             
-            # 🟢 FAST FORWARD LOGIC (Smart Bridge with Error Catching)
+            # 🟢 FAST FORWARD LOGIC (Direct Copy mode from main.py)
             forward_mode = await get_user_data_key(uid, "forward_mode", False)
             if forward_mode:
                 try:
-                    # 1. Message apne khud ke context se LOG_GROUP me copy hoga (No ChatIdInvalid Error)
-                    temp_msg = await m.copy(LOG_GROUP)
-                    
-                    # 2. Bot (c) LOG_GROUP se utha kar final destination par bhej dega (Custom Caption ke sath)
-                    await c.copy_message(
+                    # Userbot sidha target me copy karega (No LOG_GROUP bridge needed)
+                    await u.copy_message(
                         chat_id=tcid,
-                        from_chat_id=LOG_GROUP,
-                        message_id=temp_msg.id,
+                        from_chat_id=m.chat.id,
+                        message_id=m.id,
                         caption=ft if ft else None,
                         reply_to_message_id=rtmid
                     )
-                    
-                    # 3. Kachra saaf (Cleanup)
-                    await temp_msg.delete()
                     await c.delete_messages(d, p.id)
                     return 'Fast Forwarded ✅'
                 except Exception as e:
