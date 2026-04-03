@@ -1,24 +1,35 @@
-ueueuimport asyncio
-from shared_client import start_client, app
-import importlib
+# Copyright (c) 2025 devgagan : https://github.com/devgaganin.  
+# Licensed under the GNU General Public License v3.0.  
+
 import os
 import sys
 import random
 import time
-import utils.func as global_state
+import asyncio
+import importlib
 from pyrogram.types import BotCommand  
+
+# 🟢 SPEED BOOST: Activate Ultra-Fast Async Engine (Copied from your main.py)
+try:
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    print("⚡ uvloop activated! Async operations will run at max speed.")
+except ImportError:
+    print("⚠️ uvloop not installed. Standard asyncio will be used. (pip install uvloop)")
+
+from shared_client import start_client, app
+import utils.func as global_state
 
 async def human_behavior_routine():
     while True:
         active_time = random.uniform(10500.5, 11000.2)
         await asyncio.sleep(active_time)
-        
         print("Taking a ~20-minute human-like break to prevent bans...")
         global_state.IS_PAUSED = True
-        
         sleep_time = random.uniform(1150.7, 1250.3)
         await asyncio.sleep(sleep_time)
-        
         print("Waking up from break...")
         global_state.IS_PAUSED = False
 
@@ -32,7 +43,7 @@ async def setup_bot_commands():
             BotCommand("single", "Extract a single restricted message"),
             BotCommand("dl", "Download video from YouTube/Insta/etc"),
             BotCommand("adl", "Download audio from YouTube/Insta/etc"),
-            BotCommand("forward", "Toggle Fast Forward Mode (No Download)"), # 🟢 NEW COMMAND
+            BotCommand("forward", "Toggle Fast Forward Mode (No Download)"),
             BotCommand("cancel", "Cancel the currently active batch task"),
             BotCommand("setbot", "Set your custom bot token"),
             BotCommand("rembot", "Remove your custom bot token")
@@ -64,6 +75,7 @@ async def main():
         await asyncio.sleep(1)  
 
 if __name__ == "__main__":
+    # uvloop pehle hi set ho chuka hai, seedha loop get karenge
     loop = asyncio.get_event_loop()
     print("Starting clients ...")
     try:
