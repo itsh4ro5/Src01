@@ -26,7 +26,6 @@ Z, P, UB, UC, emp = {}, {}, {}, {}, {}
 ACTIVE_USERS = {}
 ACTIVE_USERS_FILE = "active_users.json"
 
-# fixed directory file_name problems 
 def sanitize(filename):
     return re.sub(r'[<>:"/\\|?*\']', '_', filename).strip(" .")[:255]
 
@@ -44,7 +43,7 @@ async def save_active_users_to_file():
         with open(ACTIVE_USERS_FILE, 'w') as f:
             json.dump(ACTIVE_USERS, f)
     except Exception as e:
-        print(f"Error saving active users: {e}")
+        pass
 
 async def add_active_batch(user_id: int, batch_info: Dict[str, Any]):
     ACTIVE_USERS[str(user_id)] = batch_info
@@ -84,11 +83,9 @@ async def upd_dlg(c):
     try:
         async for _ in c.get_dialogs(limit=100): pass
         return True
-    except Exception as e:
-        print(f'Failed to update dialogs: {e}')
+    except Exception:
         return False
 
-# fixed the old group of 2021-2022 extraction 🌝 (buy krne ka fayda nhi ab old group) ✅ 
 async def get_msg(c, u, i, d, lt):
     try:
         if lt == 'public':
@@ -99,34 +96,29 @@ async def get_msg(c, u, i, d, lt):
                     emp[i] = getattr(xm, "empty", False)
                     if not emp[i]:
                         emp[i] = True
-                        print(f"Bot chat found successfully...")
                         return xm
-                    
                 if emp[i]:
                     xm = await c.get_messages(i, d)
-                    print(f"fetched by {c.me.username}")
                     emp[i] = getattr(xm, "empty", False)
                     if emp[i]:
-                        print(f"Not fetched by {c.me.username}")
                         try: await u.join_chat(i)
                         except: pass
                         xm = await u.get_messages((await u.get_chat(f"@{i}")).id, d)
-                    
                     return xm                   
-            except Exception as e:
-                print(f'Error fetching public message: {e}')
+            except Exception:
                 return None
         else:
+            # 🟢 STRICTLY USES USER CLIENT FOR PRIVATE LINKS
             if u:
                 try:
-                    # 🟢 BUG FIX: Ensure IDs are correctly parsed as Integers
                     i_str = str(i)
-                    chat_id_100 = int(f"-100{i_str}") if i_str.isdigit() else int(i_str) if i_str.startswith('-100') else i
-                    chat_id_dash = int(f"-{i_str}") if i_str.isdigit() else int(f"-{i_str[4:]}") if i_str.startswith('-100') else i
-                    chat_raw = int(i_str) if i_str.isdigit() else i
+                    chat_id_100 = int(f"-100{i_str}") if i_str.isdigit() else int(i_str) if i_str.startswith('-100') else int(i_str)
+                    chat_id_dash = int(f"-{i_str}") if i_str.isdigit() else int(f"-{i_str[4:]}") if i_str.startswith('-100') else int(i_str)
+                    chat_raw = int(i_str)
                     
-                    # Try all ID formats strictly as integer
-                    for target_id in [chat_id_100, chat_id_dash, chat_raw]:
+                    targets = [chat_id_100, chat_id_dash, chat_raw]
+                    
+                    for target_id in targets:
                         try:
                             result = await u.get_messages(target_id, d)
                             if result and not getattr(result, "empty", False):
@@ -134,10 +126,10 @@ async def get_msg(c, u, i, d, lt):
                         except Exception:
                             pass
                     
-                    # Final fallback - refresh dialogs and try again
+                    # 🟢 PEER FIX: Try to refresh dialogs explicitly if channel not found
                     try:
-                        async for _ in u.get_dialogs(limit=200): pass
-                        for target_id in [chat_id_100, chat_id_dash, chat_raw]:
+                        async for _ in u.get_dialogs(): pass
+                        for target_id in targets:
                             try:
                                 result = await u.get_messages(target_id, d)
                                 if result and not getattr(result, "empty", False):
@@ -148,13 +140,10 @@ async def get_msg(c, u, i, d, lt):
                         pass
                     
                     return None
-                            
-                except Exception as e:
-                    print(f'Private channel error: {e}')
+                except Exception:
                     return None
             return None
-    except Exception as e:
-        print(f'Error fetching message: {e}')
+    except Exception:
         return None
 
 
@@ -167,34 +156,32 @@ async def get_ubot(uid):
         await bot.start()
         UB[uid] = bot
         return bot
-    except Exception as e:
-        print(f"Error starting bot for user {uid}: {e}")
+    except Exception:
         return None
 
 async def get_uclient(uid):
     ud = await get_user_data(uid)
-    ubot = UB.get(uid)
+    if not ud or 'session_string' not in ud:
+        return None # 🟢 GUARANTEE: Never fallback to Bot if User Session is missing
+    
     cl = UC.get(uid)
     if cl: return cl
-    if not ud: return ubot if ubot else None
-    xxx = ud.get('session_string')
-    if xxx:
+    
+    try:
+        ss = dcs(ud['session_string'])
+        gg = Client(f'{uid}_client', api_id=API_ID, api_hash=API_HASH, device_model="v3saver", session_string=ss)
+        await gg.start()
+        
+        # 🟢 MEMORY DB FIX: Fetch dialogs on start so bot remembers your channels
         try:
-            ss = dcs(xxx)
-            gg = Client(f'{uid}_client', api_id=API_ID, api_hash=API_HASH, device_model="v3saver", session_string=ss)
-            await gg.start()
-            
-            # 🟢 Unlimited Caching: Prevent PeerIdInvalid
-            try:
-                async for _ in gg.get_dialogs(): pass
-            except Exception: pass
-            
-            UC[uid] = gg
-            return gg
-        except Exception as e:
-            print(f'User client error: {e}')
-            return ubot if ubot else Y
-    return Y
+            async for _ in gg.get_dialogs(): pass
+        except Exception: pass
+        
+        UC[uid] = gg
+        return gg
+    except Exception as e:
+        print(f"User Session Error: {e}")
+        return None 
 
 async def prog(c, t, C, h, m, st):
     global P
@@ -208,7 +195,10 @@ async def prog(c, t, C, h, m, st):
         bar = '🟢' * int(p / 10) + '🔴' * (10 - int(p / 10))
         speed = c / (time.time() - st) / (1024 * 1024) if time.time() > st else 0
         eta = time.strftime('%M:%S', time.gmtime((t - c) / (speed * 1024 * 1024))) if speed > 0 else '00:00'
-        await C.edit_message_text(h, m, f"__**Pyro Handler...**__\n\n{bar}\n\n⚡**__Completed__**: {c_mb:.2f} MB / {t_mb:.2f} MB\n📊 **__Done__**: {p:.2f}%\n🚀 **__Speed__**: {speed:.2f} MB/s\n⏳ **__ETA__**: {eta}\n\n**__Powered by Team SPY__**")
+        try:
+            await C.edit_message_text(h, m, f"__**Pyro Handler...**__\n\n{bar}\n\n⚡**__Completed__**: {c_mb:.2f} MB / {t_mb:.2f} MB\n📊 **__Done__**: {p:.2f}%\n🚀 **__Speed__**: {speed:.2f} MB/s\n⏳ **__ETA__**: {eta}\n\n**__Powered by Team SPY__**")
+        except:
+            pass
         if p >= 100: P.pop(m, None)
 
 async def send_direct(c, m, tcid, ft=None, rtmid=None):
@@ -231,8 +221,7 @@ async def send_direct(c, m, tcid, ft=None, rtmid=None):
         else:
             return False
         return True
-    except Exception as e:
-        print(f'Direct send error: {e}')
+    except Exception:
         return False
 
 async def process_msg(c, u, m, d, lt, uid, i):
@@ -260,10 +249,10 @@ async def process_msg(c, u, m, d, lt, uid, i):
             
             p = await c.send_message(d, '⏳ Initializing...')
             
-            # 🟢 FAST FORWARD LOGIC
             forward_mode = await get_user_data_key(uid, "forward_mode", False)
             if forward_mode:
                 try:
+                    # 🟢 Uses User Client to directly copy to Target Chat
                     client_to_use = getattr(m, '_client', u if u else c)
                     await client_to_use.copy_message(
                         chat_id=tcid,
@@ -275,8 +264,7 @@ async def process_msg(c, u, m, d, lt, uid, i):
                     await c.delete_messages(d, p.id)
                     return 'Fast Forwarded ✅'
                 except Exception as e:
-                    print(f"Fast forward failed: {e}")
-                    await c.edit_message_text(d, p.id, f"⚠️ **Fast-Forward Error:** `{str(e)}`\n\n🔄 Fallback: Downloading instead...")
+                    await c.edit_message_text(d, p.id, f"⚠️ **Forwarding Blocked:** `{str(e)[:30]}`\n🔄 Downloading instead...")
                     await asyncio.sleep(2.5) 
                     pass 
             
@@ -289,19 +277,16 @@ async def process_msg(c, u, m, d, lt, uid, i):
             if m.video:
                 file_name = m.video.file_name
                 original_ext = ".mp4"
-                if not file_name:
-                    file_name = f"{time.time()}.mp4"
+                if not file_name: file_name = f"{time.time()}.mp4"
                 c_name = sanitize(file_name)
             elif m.audio:
                 file_name = m.audio.file_name
                 original_ext = ".mp3"
-                if not file_name:
-                    file_name = f"{time.time()}.mp3"
+                if not file_name: file_name = f"{time.time()}.mp3"
                 c_name = sanitize(file_name)
             elif m.document:
                 file_name = m.document.file_name
-                if file_name:
-                    original_ext = os.path.splitext(file_name)[1].lower()
+                if file_name: original_ext = os.path.splitext(file_name)[1].lower()
                 else:
                     original_ext = ".pdf" 
                     file_name = f"{time.time()}{original_ext}"
@@ -311,12 +296,10 @@ async def process_msg(c, u, m, d, lt, uid, i):
                 original_ext = ".jpg"
                 c_name = sanitize(file_name)
     
-            # 🟢 DOWNLOAD BUG FIX
             try:
                 client_to_use = getattr(m, '_client', u if u else c)
                 f = await client_to_use.download_media(m, file_name=c_name, progress=prog, progress_args=(c, d, p.id, st))
-            except Exception as e:
-                print(f"Download Error: {e}")
+            except Exception:
                 f = None
                 
             if not f:
@@ -427,37 +410,15 @@ async def process_msg(c, u, m, d, lt, uid, i):
             
             await c.send_message(tcid, text=ft if ft else orig_text, reply_to_message_id=rtmid)
             return 'Sent.'
+        else:
+            return 'Skipped: Unsupported Type.'
     except Exception as e:
         return f'Error: {str(e)[:50]}'
-
-@X.on_message(filters.command(['batch', 'single']))
-async def process_cmd(c, m):
-    uid = m.from_user.id
-    cmd = m.command[0]
-    
-    if FREEMIUM_LIMIT == 0 and not await is_premium_user(uid):
-        await m.reply_text("This bot does not provide free servies, get subscription from OWNER")
-        return
-    
-    if await sub(c, m) == 1: return
-    pro = await m.reply_text('Doing some checks hold on...')
-    
-    if is_user_active(uid):
-        await pro.edit('You have an active task. Use /stop to cancel it.')
-        return
-    
-    ubot = await get_ubot(uid)
-    if not ubot:
-        await pro.edit('Add your bot with /setbot first')
-        return
-    
-    Z[uid] = {'step': 'start' if cmd == 'batch' else 'start_single'}
-    await pro.edit(f'Send {"start link..." if cmd == "batch" else "link you to process"}.')
 
 @X.on_message(filters.command(['cancel', 'stop']))
 async def cancel_cmd(c, m):
     uid = m.from_user.id
-    if is_user_active(uid):
+    if await is_user_active(uid):
         if await request_batch_cancel(uid):
             await m.reply_text('Cancellation requested. The current batch will stop after the current download completes.')
         else:
@@ -483,7 +444,6 @@ async def toggle_forward(c, m):
 async def text_handler(c, m):
     uid = m.from_user.id
     
-    # 🟢 NEW SMART PROMPT (Link detection without commands)
     if uid not in Z:
         if m.text and ("t.me/" in m.text or "telegram.me/" in m.text):
             i, d, lt = E(m.text)
@@ -502,84 +462,38 @@ async def text_handler(c, m):
         await m.reply("Add your bot /setbot `token`")
         return
 
-    if s == 'start':
-        L = m.text
-        i, d, lt = E(L)
-        if not i or not d:
-            await m.reply_text('Invalid link format.')
-            Z.pop(uid, None)
-            return
-        Z[uid].update({'step': 'count', 'cid': i, 'sid': d, 'lt': lt})
-        await m.reply_text('How many messages?')
-
-    elif s == 'start_single':
-        L = m.text
-        i, d, lt = E(L)
-        if not i or not d:
-            await m.reply_text('Invalid link format.')
-            Z.pop(uid, None)
-            return
-
-        Z[uid].update({'step': 'process_single', 'cid': i, 'sid': d, 'lt': lt})
-        i, s, lt = Z[uid]['cid'], Z[uid]['sid'], Z[uid]['lt']
-        pt = await m.reply_text('Processing...')
-        
-        ubot = UB.get(uid)
-        if not ubot:
-            await pt.edit('Add bot with /setbot first')
-            Z.pop(uid, None)
-            return
-        
-        uc = await get_uclient(uid)
-        if not uc:
-            await pt.edit('Cannot proceed without user client.')
-            Z.pop(uid, None)
-            return
-            
-        if is_user_active(uid):
-            await pt.edit('Active task exists. Use /stop first.')
-            Z.pop(uid, None)
-            return
-
-        try:
-            msg = await get_msg(ubot, uc, i, s, lt)
-            if msg:
-                res = await process_msg(ubot, uc, msg, str(m.chat.id), lt, uid, i)
-                await pt.edit(f'1/1: {res}')
-            else:
-                await pt.edit('Message not found')
-        except Exception as e:
-            await pt.edit(f'Error: {str(e)[:50]}')
-        finally:
-            Z.pop(uid, None)
-
-    elif s == 'count':
+    if s == 'count':
         if not m.text.isdigit():
-            await m.reply_text('Enter valid number.')
+            await m.reply_text('❌ Kripya sirf number (digits) bhejein.')
             return
         
         count = int(m.text)
         maxlimit = PREMIUM_LIMIT if await is_premium_user(uid) else FREEMIUM_LIMIT
 
         if count > maxlimit:
-            await m.reply_text(f'Maximum limit is {maxlimit}.')
+            await m.reply_text(f'❌ Maximum limit is {maxlimit}.')
             return
 
         Z[uid].update({'step': 'process', 'did': str(m.chat.id), 'num': count})
         i, s, n, lt = Z[uid]['cid'], Z[uid]['sid'], Z[uid]['num'], Z[uid]['lt']
         success = 0
 
-        pt = await m.reply_text('Processing batch...')
+        pt = await m.reply_text('⏳ Processing...')
+        
         uc = await get_uclient(uid)
         ubot = UB.get(uid)
         
-        if not uc or not ubot:
-            await pt.edit('Missing client setup')
+        if lt == 'private' and not uc:
+            await pt.edit('❌ **User Session Error!**\nAapne `/login` nahi kiya hai ya session expire ho gaya hai. Kripya naye sire se `/login` karein.')
+            Z.pop(uid, None)
+            return
+        elif not ubot:
+            await pt.edit('❌ Missing Bot client setup. Use /setbot first.')
             Z.pop(uid, None)
             return
             
-        if is_user_active(uid):
-            await pt.edit('Active task exists')
+        if await is_user_active(uid):
+            await pt.edit('❌ Active task exists')
             Z.pop(uid, None)
             return
         
@@ -599,8 +513,8 @@ async def text_handler(c, m):
                     except: pass
                     await asyncio.sleep(random.uniform(55.5, 65.5))
                 
-                if should_cancel(uid):
-                    await pt.edit(f'Cancelled at {j}/{n}. Success: {success}')
+                if await should_cancel(uid):
+                    await pt.edit(f'🛑 Cancelled at {j}/{n}. Success: {success}')
                     break
                 
                 await update_batch_progress(uid, j, success)
@@ -614,7 +528,8 @@ async def text_handler(c, m):
                         if res and any(x in res for x in ['Done', 'Copied', 'Sent', 'Forwarded']):
                             success += 1
                     else:
-                        await pt.edit(f'⚠️ **Skipped {mid}:** Message is deleted or Bot has no access to this specific chat ID.')
+                        # 🟢 REAL ERROR MESSAGE
+                        await pt.edit(f'⚠️ **Skipped {mid}:** Aapke User Account ko ye message nahi mila. (Chat access nahi hai ya msg delete ho gaya hai)')
                         await asyncio.sleep(2)
                 except Exception as e:
                     try: await pt.edit(f'{j+1}/{n}: Error - {str(e)[:30]}')
@@ -627,7 +542,7 @@ async def text_handler(c, m):
                     await asyncio.sleep(delay_time)
             
             if j+1 == n:
-                await m.reply_text(f'Batch Completed ✅ Success: {success}/{n}')
+                await m.reply_text(f'🎉 **Task Completed** ✅ Success: {success}/{n}')
         
         finally:
             await remove_active_batch(uid)
