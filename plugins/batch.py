@@ -17,13 +17,13 @@ from utils.custom_filters import login_in_progress
 from utils.encrypt import dcs
 from typing import Dict, Any, Optional
 
-# 🟢 LOGGING SETUP
+# 🟢 15-Seconds Pyrogram Warning Disabled + Custom Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 logging.getLogger("pyrogram.session.session").setLevel(logging.ERROR)
 
 Y = None if not STRING else __import__('shared_client').userbot
-Z, P, UB, UC = {}, {}, {}, {}
+Z, P, UB, UC, emp = {}, {}, {}, {}, {}
 
 ACTIVE_USERS = {}
 ACTIVE_USERS_FILE = "active_users.json"
@@ -45,7 +45,7 @@ async def save_active_users_to_file():
         with open(ACTIVE_USERS_FILE, 'w') as f:
             json.dump(ACTIVE_USERS, f)
     except Exception as e:
-        logger.error(f"Error saving active users: {e}")
+        pass
 
 async def add_active_batch(user_id: int, batch_info: Dict[str, Any]):
     ACTIVE_USERS[str(user_id)] = batch_info
@@ -83,82 +83,63 @@ ACTIVE_USERS = load_active_users()
 
 async def upd_dlg(c):
     try:
-        logger.info("Updating dialogs in background...")
         async for _ in c.get_dialogs(limit=100): pass
         return True
     except Exception as e:
-        logger.error(f'Failed to update dialogs: {e}')
         return False
 
-# 🟢 BUG FIX 1: Flawless Fetching for Public & Private Channels (No Skipping)
+# fixed the old group of 2021-2022 extraction 🌝 (buy krne ka fayda nhi ab old group) ✅ 
 async def get_msg(c, u, i, d, lt):
     logger.info(f"Fetch Request -> Chat: {i} | MsgID: {d} | Type: {lt}")
     try:
         if lt == 'public':
             try:
-                # Step 1: Try fetching with Bot
-                try:
-                    xm = await c.get_messages(i, d)
-                    if not getattr(xm, "empty", False):
-                        logger.info("✅ Message fetched successfully by Bot")
+                if str(i).lower().endswith('bot'):
+                    emp[i] = False
+                    xm = await u.get_messages(i, d)
+                    emp[i] = getattr(xm, "empty", False)
+                    if not emp[i]:
+                        emp[i] = True
                         return xm
-                except FloodWait as fw:
-                    logger.warning(f"⚠️ FloodWait on Bot! Sleeping {fw.value}s...")
-                    await asyncio.sleep(fw.value + 2)
-                    xm = await c.get_messages(i, d)
-                    if not getattr(xm, "empty", False):
-                        return xm
-                except Exception as e:
-                    logger.debug(f"Bot could not fetch public message: {e}")
                 
-                # Step 2: Try fetching with Userbot (if Bot fails)
-                if u:
-                    logger.info("Trying to fetch via Userbot...")
-                    try: 
-                        await u.join_chat(i)
-                    except: pass
-                    
+                # Public channel cache fix with get() to prevent KeyError
+                if emp.get(i, True):
                     try:
-                        xm = await u.get_messages(i, d)
-                        if not getattr(xm, "empty", False):
-                            logger.info("✅ Message fetched successfully by Userbot")
-                            return xm
-                    except FloodWait as fw:
-                        await asyncio.sleep(fw.value + 2)
-                        xm = await u.get_messages(i, d)
-                        if not getattr(xm, "empty", False):
-                            return xm
+                        xm = await c.get_messages(i, d)
+                        emp[i] = getattr(xm, "empty", False)
                     except Exception:
+                        emp[i] = True
+                        
+                    if emp[i] and u:
+                        try: await u.join_chat(i)
+                        except: pass
                         try:
-                            chat_info = await u.get_chat(f"@{i}")
-                            xm = await u.get_messages(chat_info.id, d)
-                            if not getattr(xm, "empty", False):
-                                logger.info("✅ Message fetched using chat ID by Userbot")
-                                return xm
-                        except Exception as err:
-                            logger.error(f"Userbot also failed to fetch: {err}")
-                
-                logger.warning(f"❌ Could not fetch Public Message {d} from {i}")
-                return None                   
+                            xm = await u.get_messages(i, d)
+                        except Exception:
+                            xm = await u.get_messages((await u.get_chat(f"@{i}")).id, d)
+                    
+                    return xm                   
             except Exception as e:
-                logger.error(f'Error fetching public message: {e}')
+                logger.error(f"Error fetching public message: {e}")
                 return None
         else:
             if u:
                 try:
-                    logger.info("Processing Private Chat ID Formats...")
+                    # 🟢 ID Safety Fix: Safely convert to integer
                     i_str = str(i)
-                    chat_id_100 = int(f"-100{i_str}") if i_str.isdigit() else int(i_str) if i_str.startswith('-100') else int(i_str)
-                    chat_id_dash = int(f"-{i_str}") if i_str.isdigit() else int(f"-{i_str[4:]}") if i_str.startswith('-100') else int(i_str)
-                    chat_raw = int(i_str)
-                    
-                    targets = [chat_id_100, chat_id_dash, chat_raw]
+                    targets = []
+                    if i_str.lstrip('-').isdigit():
+                        chat_raw = int(i_str)
+                        chat_id_100 = int(f"-100{i_str}") if i_str.isdigit() else chat_raw
+                        chat_id_dash = int(f"-{i_str}") if i_str.isdigit() else int(f"-{i_str[4:]}") if i_str.startswith('-100') else chat_raw
+                        targets = [chat_id_100, chat_id_dash, chat_raw]
+                    else:
+                        targets = [i] # Just string
                     
                     for target_id in targets:
                         try:
                             result = await u.get_messages(target_id, d)
                             if result and not getattr(result, "empty", False):
-                                logger.info(f"✅ Message Found in {target_id}!")
                                 return result
                         except FloodWait as fw:
                             logger.warning(f"⚠️ FloodWait Active! Sleeping {fw.value}s")
@@ -169,7 +150,6 @@ async def get_msg(c, u, i, d, lt):
                         except Exception:
                             pass
                     
-                    logger.warning("Refreshing Dialogs Cache...")
                     try:
                         async for _ in u.get_dialogs(limit=200): pass
                         for target_id in targets:
@@ -181,6 +161,7 @@ async def get_msg(c, u, i, d, lt):
                                 pass
                     except Exception:
                         pass
+                    
                     return None
                             
                 except Exception as e:
@@ -201,39 +182,28 @@ async def get_ubot(uid):
         UB[uid] = bot
         return bot
     except Exception as e:
-        logger.error(f"Error starting bot for user {uid}: {e}")
         return None
 
 async def get_uclient(uid):
     ud = await get_user_data(uid)
     ubot = UB.get(uid)
     cl = UC.get(uid)
-    
-    if cl:
+    if cl: 
         if not cl.is_connected:
             try: await cl.connect()
-            except Exception: pass
+            except: pass
         return cl
-        
-    if not ud: 
-        return ubot if ubot else None
-        
+    if not ud: return ubot if ubot else None
     xxx = ud.get('session_string')
     if xxx:
         try:
             ss = dcs(xxx)
             gg = Client(f'{uid}_client', api_id=API_ID, api_hash=API_HASH, device_model="v3saver", session_string=ss)
             await gg.start()
-            
-            try:
-                async for _ in gg.get_dialogs(): pass
-            except Exception:
-                pass
-                
+            await upd_dlg(gg)
             UC[uid] = gg
             return gg
         except Exception as e:
-            logger.error(f'User client error: {e}')
             return ubot if ubot else Y
     return Y
 
@@ -249,12 +219,13 @@ async def prog(c, t, C, h, m, st):
         bar = '🟢' * int(p / 10) + '🔴' * (10 - int(p / 10))
         speed = c / (time.time() - st) / (1024 * 1024) if time.time() > st else 0
         eta = time.strftime('%M:%S', time.gmtime((t - c) / (speed * 1024 * 1024))) if speed > 0 else '00:00'
-        await C.edit_message_text(h, m, f"__**Pyro Handler...**__\n\n{bar}\n\n⚡**__Completed__**: {c_mb:.2f} MB / {t_mb:.2f} MB\n📊 **__Done__**: {p:.2f}%\n🚀 **__Speed__**: {speed:.2f} MB/s\n⏳ **__ETA__**: {eta}\n\n**__Powered by Team SPY__**")
+        try:
+            await C.edit_message_text(h, m, f"__**Pyro Handler...**__\n\n{bar}\n\n⚡**__Completed__**: {c_mb:.2f} MB / {t_mb:.2f} MB\n📊 **__Done__**: {p:.2f}%\n🚀 **__Speed__**: {speed:.2f} MB/s\n⏳ **__ETA__**: {eta}\n\n**__Powered by Team SPY__**")
+        except: pass
         if p >= 100: P.pop(m, None)
 
 async def send_direct(c, m, tcid, ft=None, rtmid=None):
     try:
-        logger.info(f"Sending direct message to {tcid}")
         if m.video:
             await c.send_video(tcid, m.video.file_id, caption=ft, duration=m.video.duration, width=m.video.width, height=m.video.height, reply_to_message_id=rtmid)
         elif m.video_note:
@@ -278,8 +249,11 @@ async def send_direct(c, m, tcid, ft=None, rtmid=None):
         return False
 
 async def process_msg(c, u, m, d, lt, uid, i):
-    logger.info(f"Processing Message ID: {m.id} | UID: {uid}")
     try:
+        # 🟢 PEER ID FIX: String IDs ko safely Integer banayega
+        if isinstance(d, str) and d.lstrip('-').isdigit():
+            d = int(d)
+
         cfg_chat = await get_user_data_key(d, 'chat_id', None)
         tcid = d
         rtmid = None
@@ -297,22 +271,18 @@ async def process_msg(c, u, m, d, lt, uid, i):
             user_cap = await get_user_data_key(d, 'caption', '')
             ft = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
             
-            # 🟢 BUG FIX 2: Smart Check for Protected Content in Public Channels
+            # 🟢 RESTRICTED PUBLIC CHANNEL FIX:
             is_restricted = getattr(m.chat, "has_protected_content", False)
             
-            if lt == 'public' and not is_restricted:
-                logger.info("Public File (Unrestricted): Sending Directly...")
-                if await send_direct(c, m, tcid, ft, rtmid):
-                    return 'Sent directly.'
-                logger.warning("Direct send failed! Falling back to advanced extraction...")
-            elif lt == 'public' and is_restricted:
-                logger.info("Public File is RESTRICTED (SRC ON). Bypassing direct send, routing to advanced extraction...")
+            if lt == 'public' and not emp.get(i, False) and not is_restricted:
+                logger.info("Sending unrestricted public file directly.")
+                await send_direct(c, m, tcid, ft, rtmid)
+                return 'Sent directly.'
             
             p = await c.send_message(d, '⏳ Initializing...')
             
             st = time.time()
-            logger.info("Starting Media Download...")
-            await c.edit_message_text(d, p.id, '⬇️ Downloading...')
+            await c.edit_message_text(d, p.id, '⬇️ Downloading (Restricted Content)...')
 
             c_name = f"{time.time()}"
             original_ext = ""
@@ -320,16 +290,19 @@ async def process_msg(c, u, m, d, lt, uid, i):
             if m.video:
                 file_name = m.video.file_name
                 original_ext = ".mp4"
-                if not file_name: file_name = f"{time.time()}.mp4"
+                if not file_name:
+                    file_name = f"{time.time()}.mp4"
                 c_name = sanitize(file_name)
             elif m.audio:
                 file_name = m.audio.file_name
                 original_ext = ".mp3"
-                if not file_name: file_name = f"{time.time()}.mp3"
+                if not file_name:
+                    file_name = f"{time.time()}.mp3"
                 c_name = sanitize(file_name)
             elif m.document:
                 file_name = m.document.file_name
-                if file_name: original_ext = os.path.splitext(file_name)[1].lower()
+                if file_name:
+                    original_ext = os.path.splitext(file_name)[1].lower()
                 else:
                     original_ext = ".pdf" 
                     file_name = f"{time.time()}{original_ext}"
@@ -341,18 +314,15 @@ async def process_msg(c, u, m, d, lt, uid, i):
     
             try:
                 client_to_use = getattr(m, '_client', u if u else c)
-                logger.info(f"Downloading with Client: {client_to_use.name if hasattr(client_to_use, 'name') else 'User Session'}")
                 f = await client_to_use.download_media(m, file_name=c_name, progress=prog, progress_args=(c, d, p.id, st))
             except Exception as dl_err:
-                logger.error(f"Download Exception: {dl_err}")
+                logger.error(f"Download Error: {dl_err}")
                 f = None
                 
             if not f:
-                logger.error("Download Failed. File is None.")
-                await c.edit_message_text(d, p.id, 'Failed.')
+                await c.edit_message_text(d, p.id, 'Failed to download.')
                 return 'Failed.'
             
-            logger.info(f"File downloaded successfully to: {f}")
             await c.edit_message_text(d, p.id, 'Renaming...')
             
             if (m.video and m.video.file_name) or (m.audio and m.audio.file_name) or (m.document and m.document.file_name):
@@ -361,7 +331,6 @@ async def process_msg(c, u, m, d, lt, uid, i):
                     corrected_name = renamed_f + original_ext
                     os.rename(renamed_f, corrected_name)
                     f = corrected_name
-                    logger.info(f"Extension appended: {f}")
                 else:
                     f = renamed_f
             
@@ -369,7 +338,6 @@ async def process_msg(c, u, m, d, lt, uid, i):
             th = thumbnail(d)
             
             if fsize > 2 and Y:
-                logger.warning("File > 2GB detected. Routing through alternative Y Client (LOG_GROUP).")
                 st = time.time()
                 await c.edit_message_text(d, p.id, 'File is larger than 2GB. Using alternative method...')
                 await upd_dlg(Y)
@@ -401,7 +369,6 @@ async def process_msg(c, u, m, d, lt, uid, i):
                 
                 return 'Done (Large file).'
             
-            logger.info("Starting Media Upload...")
             await c.edit_message_text(d, p.id, 'Uploading...')
             st = time.time()
 
@@ -443,19 +410,16 @@ async def process_msg(c, u, m, d, lt, uid, i):
                                         progress=prog, progress_args=(c, d, p.id, st), 
                                         reply_to_message_id=rtmid)
             except Exception as e:
-                logger.error(f"Upload Exception: {e}")
                 await c.edit_message_text(d, p.id, f'Upload failed: {str(e)[:30]}')
                 if os.path.exists(f): os.remove(f)
                 return 'Failed.'
             
-            logger.info("Upload Completed Successfully! Removing temp file.")
             os.remove(f)
             await c.delete_messages(d, p.id)
             
             return 'Done.'
             
         elif m.text:
-            logger.info("Processing Text Message...")
             orig_text = m.text.markdown
             proc_text = await process_text_with_rules(d, orig_text)
             user_cap = await get_user_data_key(d, 'caption', '')
@@ -463,15 +427,18 @@ async def process_msg(c, u, m, d, lt, uid, i):
             
             await c.send_message(tcid, text=ft if ft else orig_text, reply_to_message_id=rtmid)
             return 'Sent.'
+        else:
+            # 🟢 NONETYPE ITERABLE FIX: Always return a string, even if unsupported.
+            return 'Skipped: Unsupported Type.'
+            
     except Exception as e:
-        logger.error(f"Global Process Error: {e}")
+        logger.error(f"Global Error in process_msg: {e}")
         return f'Error: {str(e)[:50]}'
 
 @X.on_message(filters.command(['batch', 'single']))
 async def process_cmd(c, m):
     uid = m.from_user.id
     cmd = m.command[0]
-    logger.info(f"Command /{cmd} initiated by {uid}")
     
     if FREEMIUM_LIMIT == 0 and not await is_premium_user(uid):
         await m.reply_text("This bot does not provide free servies, get subscription from OWNER")
@@ -481,13 +448,11 @@ async def process_cmd(c, m):
     pro = await m.reply_text('Doing some checks hold on...')
     
     if is_user_active(uid):
-        logger.warning(f"User {uid} already has an active task.")
         await pro.edit('You have an active task. Use /stop to cancel it.')
         return
     
     ubot = await get_ubot(uid)
     if not ubot:
-        logger.warning(f"User {uid} has no bot_token set.")
         await pro.edit('Add your bot with /setbot first')
         return
     
@@ -497,7 +462,6 @@ async def process_cmd(c, m):
 @X.on_message(filters.command(['cancel', 'stop']))
 async def cancel_cmd(c, m):
     uid = m.from_user.id
-    logger.info(f"Cancel request by {uid}")
     if is_user_active(uid):
         if await request_batch_cancel(uid):
             await m.reply_text('Cancellation requested. The current batch will stop after the current download completes.')
@@ -506,40 +470,25 @@ async def cancel_cmd(c, m):
     else:
         await m.reply_text('No active batch process found.')
 
-@X.on_message(filters.command("forward"))
-async def toggle_forward(c, m):
-    uid = m.from_user.id
-    current_status = await get_user_data_key(uid, "forward_mode", False)
-    new_status = not current_status
-    await save_user_data(uid, "forward_mode", new_status)
-    
-    if new_status:
-        await m.reply_text("✅ **Fast Forward Mode ON**\n\nAb jin channels me forward ON (unrestricted) hoga, wahan bot bina download/upload kiye files ko seedha clone karega.")
-    else:
-        await m.reply_text("❌ **Fast Forward Mode OFF**\n\nAb bot sabhi files ko hamesha pehle download karega aur phir upload karega.")
-
 @X.on_message(filters.text & filters.private & ~login_in_progress & ~filters.command([
     'start', 'batch', 'cancel', 'login', 'logout', 'stop', 'set', 
-    'pay', 'redeem', 'gencode', 'single', 'generate', 'keyinfo', 'encrypt', 'decrypt', 'keys', 'setbot', 'rembot', 'forward']))
+    'pay', 'redeem', 'gencode', 'single', 'generate', 'keyinfo', 'encrypt', 'decrypt', 'keys', 'setbot', 'rembot']))
 async def text_handler(c, m):
     uid = m.from_user.id
     
     if uid not in Z:
         if m.text and ("t.me/" in m.text or "telegram.me/" in m.text):
-            logger.info(f"Auto-detected link from {uid}")
             i, d, lt = E(m.text)
             if not i or not d:
                 await m.reply_text('❌ Invalid link format.')
                 return
             Z[uid] = {'step': 'count', 'cid': i, 'sid': d, 'lt': lt}
-            await m.reply_text('🔗 **Link Detected!**\n\n🔢 **Kitne messages nikalne hain?**\n👉 (Sirf ek nikalna है तो `1` लिखें, या Batch के लिए total number भेजें)')
+            await m.reply_text('🔗 **Link Detected!**\n\n🔢 **Kitne messages nikalne hain?**\n👉 (Sirf 1 nikalna hai toh `1` likhein, ya Batch ke liye total number bhejein)')
             return
         else:
             return
             
     s = Z[uid].get('step')
-    logger.info(f"Text Handler Step: {s} | User: {uid}")
-    
     x = await get_ubot(uid)
     if not x:
         await m.reply("Add your bot /setbot `token`")
@@ -549,7 +498,6 @@ async def text_handler(c, m):
         L = m.text
         i, d, lt = E(L)
         if not i or not d:
-            logger.warning(f"Invalid link from user {uid}: {L}")
             await m.reply_text('Invalid link format.')
             Z.pop(uid, None)
             return
@@ -560,7 +508,6 @@ async def text_handler(c, m):
         L = m.text
         i, d, lt = E(L)
         if not i or not d:
-            logger.warning(f"Invalid link from user {uid}: {L}")
             await m.reply_text('Invalid link format.')
             Z.pop(uid, None)
             return
@@ -577,7 +524,6 @@ async def text_handler(c, m):
         
         uc = await get_uclient(uid)
         if not uc:
-            logger.error(f"User Client not active for {uid}")
             await pt.edit('Cannot proceed without user client.')
             Z.pop(uid, None)
             return
@@ -590,14 +536,11 @@ async def text_handler(c, m):
         try:
             msg = await get_msg(ubot, uc, i, s, lt)
             if msg:
-                logger.info(f"Initiating process for single msg {s}")
                 res = await process_msg(ubot, uc, msg, str(m.chat.id), lt, uid, i)
                 await pt.edit(f'1/1: {res}')
             else:
-                logger.warning(f"Message {s} not found or skipped.")
-                await pt.edit('⚠️ Message not found! (Private Channel / Removed)')
+                await pt.edit('Message not found')
         except Exception as e:
-            logger.error(f"Single Extraction Error: {e}")
             await pt.edit(f'Error: {str(e)[:50]}')
         finally:
             Z.pop(uid, None)
@@ -614,7 +557,6 @@ async def text_handler(c, m):
             await m.reply_text(f'Maximum limit is {maxlimit}.')
             return
 
-        logger.info(f"Starting batch for {count} messages for {uid}")
         Z[uid].update({'step': 'process', 'did': str(m.chat.id), 'num': count})
         i, s, n, lt = Z[uid]['cid'], Z[uid]['sid'], Z[uid]['num'], Z[uid]['lt']
         success = 0
@@ -647,30 +589,26 @@ async def text_handler(c, m):
                 while IS_PAUSED:
                     try: await pt.edit('Taking a human-like break... Paused for ~20 mins.')
                     except: pass
-                    logger.info("Bot is in human-like break mode...")
                     await asyncio.sleep(random.uniform(55.5, 65.5))
                 
                 if should_cancel(uid):
-                    logger.info(f"Batch cancelled by {uid}")
                     await pt.edit(f'Cancelled at {j}/{n}. Success: {success}')
                     break
                 
                 await update_batch_progress(uid, j, success)
                 
                 mid = int(s) + j
-                logger.info(f"Fetching message {j+1}/{n} (ID: {mid})")
                 
                 try:
                     msg = await get_msg(ubot, uc, i, mid, lt)
                     if msg:
                         res = await process_msg(ubot, uc, msg, str(m.chat.id), lt, uid, i)
-                        if 'Done' in res or 'Copied' in res or 'Sent' in res or 'Forwarded' in res:
-                            success += 1
-                            logger.info(f"Message {mid} successfully processed.")
+                        # 🟢 NONETYPE ITERABLE FIX
+                        if res and isinstance(res, str):
+                            if any(x in res for x in ['Done', 'Copied', 'Sent', 'Forwarded']):
+                                success += 1
                     else:
                         logger.warning(f"⚠️ Skipped {mid}: Could not fetch message.")
-                        try: await pt.edit(f"⚠️ Skipped {mid}: Not found.")
-                        except: pass
                 except Exception as e:
                     logger.error(f"Error on message {mid}: {e}")
                     try: await pt.edit(f'{j+1}/{n}: Error - {str(e)[:30]}')
@@ -679,11 +617,9 @@ async def text_handler(c, m):
                 delay_time = random.uniform(17.5, 35.8)
                 try: await pt.edit(f'Sleeping for {delay_time:.2f}s to act like human & prevent ban...')
                 except: pass
-                logger.info(f"Sleeping for {delay_time:.2f} seconds...")
                 await asyncio.sleep(delay_time)
             
             if j+1 == n:
-                logger.info(f"Batch completed for {uid}. Success: {success}/{n}")
                 await m.reply_text(f'Batch Completed ✅ Success: {success}/{n}')
         
         finally:
