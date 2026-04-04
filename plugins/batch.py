@@ -106,15 +106,26 @@ async def get_msg(c, u, i, d, lt):
                         logger.info(f"Bot chat found successfully...")
                         return xm
                     
-                if emp[i]:
-                    xm = await c.get_messages(i, d)
-                    logger.info(f"fetched by {c.me.username}")
-                    emp[i] = getattr(xm, "empty", False)
-                    if emp[i]:
-                        logger.info(f"Not fetched by {c.me.username}, trying Userbot...")
+                # 🟢 BUG FIX 1: Solved KeyError by using .get()
+                if emp.get(i, True):
+                    try:
+                        xm = await c.get_messages(i, d)
+                        emp[i] = getattr(xm, "empty", False)
+                        if not emp[i]:
+                            logger.info(f"fetched by {c.me.username}")
+                    except Exception as bot_err:
+                        logger.warning(f"Bot could not fetch public message: {bot_err}")
+                        emp[i] = True
+                        
+                    if emp[i] and u:
+                        logger.info(f"Not fetched by Bot, trying Userbot...")
                         try: await u.join_chat(i)
                         except: pass
-                        xm = await u.get_messages((await u.get_chat(f"@{i}")).id, d)
+                        
+                        try:
+                            xm = await u.get_messages(i, d)
+                        except Exception:
+                            xm = await u.get_messages((await u.get_chat(f"@{i}")).id, d)
                     
                     return xm                   
             except Exception as e:
@@ -296,10 +307,16 @@ async def process_msg(c, u, m, d, lt, uid, i):
             user_cap = await get_user_data_key(d, 'caption', '')
             ft = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
             
-            if lt == 'public' and not emp.get(i, False):
-                logger.info("Public File: Sending Directly...")
-                await send_direct(c, m, tcid, ft, rtmid)
-                return 'Sent directly.'
+            # 🟢 BUG FIX 2: Smart Check for SRC (Protected Content) even on Public Channels
+            is_restricted = getattr(m.chat, "has_protected_content", False)
+            
+            if lt == 'public' and not emp.get(i, False) and not is_restricted:
+                logger.info("Public File (Unrestricted): Sending Directly...")
+                if await send_direct(c, m, tcid, ft, rtmid):
+                    return 'Sent directly.'
+                logger.warning("Direct send failed! Falling back to advanced extraction...")
+            elif lt == 'public' and is_restricted:
+                logger.info("Public File is RESTRICTED (SRC ON). Bypassing direct send, using advanced extraction...")
             
             p = await c.send_message(d, '⏳ Initializing...')
             
@@ -335,7 +352,6 @@ async def process_msg(c, u, m, d, lt, uid, i):
                 original_ext = ".jpg"
                 c_name = sanitize(file_name)
     
-            # 🟢 DOWNLOAD BUG FIX: Dynamic Client Selection
             try:
                 client_to_use = getattr(m, '_client', u if u else c)
                 logger.info(f"Downloading with Client: {client_to_use.name if hasattr(client_to_use, 'name') else 'Unknown'}")
