@@ -121,15 +121,14 @@ async def get_msg(c, u, i, d, lt):
                 try:
                     async for _ in u.get_dialogs(limit=50): pass
                     
-                    # Try with -100 prefix first
-                    if str(i).startswith('-100'):
-                        chat_id_100 = i
-                        # For - prefix, remove -100 and add just -
-                        base_id = str(i)[4:]  # Remove -100
-                        chat_id_dash = f"-{base_id}"
-                    elif i.isdigit():
-                        chat_id_100 = f"-100{i}"
-                        chat_id_dash = f"-{i}"
+                    # 🟢 BUG FIX: Ensure IDs are Integers to prevent silent skip crashes
+                    i_str = str(i)
+                    if i_str.startswith('-100'):
+                        chat_id_100 = int(i_str)
+                        chat_id_dash = int(f"-{i_str[4:]}")
+                    elif i_str.isdigit():
+                        chat_id_100 = int(f"-100{i_str}")
+                        chat_id_dash = int(f"-{i_str}")
                     else:
                         chat_id_100 = i
                         chat_id_dash = i
@@ -168,6 +167,7 @@ async def get_msg(c, u, i, d, lt):
     except Exception as e:
         print(f'Error fetching message: {e}')
         return None
+
 
 async def get_ubot(uid):
     bt = await get_user_data_key(uid, "bot_token", None)
@@ -269,26 +269,23 @@ async def process_msg(c, u, m, d, lt, uid, i):
             
             p = await c.send_message(d, '⏳ Initializing...')
             
-            # 🟢 FAST FORWARD LOGIC (Smart Bridge with Fallback)
+            # 🟢 FAST FORWARD LOGIC (Direct Copy mode)
             forward_mode = await get_user_data_key(uid, "forward_mode", False)
             if forward_mode:
                 try:
-                    # Dynamically use the correct client
-                    client_to_use = m._client if getattr(m, '_client', None) else u
-                    temp_msg = await client_to_use.copy_message(LOG_GROUP, m.chat.id, m.id)
-                    
-                    await c.copy_message(
+                    client_to_use = getattr(m, '_client', u if u else c)
+                    await client_to_use.copy_message(
                         chat_id=tcid,
-                        from_chat_id=LOG_GROUP,
-                        message_id=temp_msg.id,
+                        from_chat_id=m.chat.id,
+                        message_id=m.id,
                         caption=ft if ft else None,
                         reply_to_message_id=rtmid
                     )
-                    await temp_msg.delete()
                     await c.delete_messages(d, p.id)
                     return 'Fast Forwarded ✅'
                 except Exception as e:
-                    await c.edit_message_text(d, p.id, f"⚠️ **Forwarding Restricted:** Channel doesn't allow copying.\n\n🔄 Fallback: Downloading instead...")
+                    print(f"Fast forward failed: {e}")
+                    await c.edit_message_text(d, p.id, f"⚠️ **Fast-Forward Restricted:** `{str(e)}`\n\n🔄 Fallback: Downloading instead...")
                     await asyncio.sleep(2.5) 
                     pass 
             
@@ -301,16 +298,19 @@ async def process_msg(c, u, m, d, lt, uid, i):
             if m.video:
                 file_name = m.video.file_name
                 original_ext = ".mp4"
-                if not file_name: file_name = f"{time.time()}.mp4"
+                if not file_name:
+                    file_name = f"{time.time()}.mp4"
                 c_name = sanitize(file_name)
             elif m.audio:
                 file_name = m.audio.file_name
                 original_ext = ".mp3"
-                if not file_name: file_name = f"{time.time()}.mp3"
+                if not file_name:
+                    file_name = f"{time.time()}.mp3"
                 c_name = sanitize(file_name)
             elif m.document:
                 file_name = m.document.file_name
-                if file_name: original_ext = os.path.splitext(file_name)[1].lower()
+                if file_name:
+                    original_ext = os.path.splitext(file_name)[1].lower()
                 else:
                     original_ext = ".pdf" 
                     file_name = f"{time.time()}{original_ext}"
@@ -320,9 +320,9 @@ async def process_msg(c, u, m, d, lt, uid, i):
                 original_ext = ".jpg"
                 c_name = sanitize(file_name)
     
-            # 🟢 DOWNLOAD FIX (Uses exact client that fetched message to prevent NoneType crash)
+            # 🟢 DOWNLOAD BUG FIX: Dynamic client resolution
             try:
-                client_to_use = m._client if getattr(m, '_client', None) else (u if u else c)
+                client_to_use = getattr(m, '_client', u if u else c)
                 f = await client_to_use.download_media(m, file_name=c_name, progress=prog, progress_args=(c, d, p.id, st))
             except Exception as e:
                 print(f"Download Error: {e}")
@@ -439,7 +439,6 @@ async def process_msg(c, u, m, d, lt, uid, i):
     except Exception as e:
         return f'Error: {str(e)[:50]}'
 
-# Backup commands (Can still be used, but not necessarily needed anymore)
 @X.on_message(filters.command(['batch', 'single']))
 async def process_cmd(c, m):
     uid = m.from_user.id
@@ -493,7 +492,7 @@ async def toggle_forward(c, m):
 async def text_handler(c, m):
     uid = m.from_user.id
     
-    # 🟢 SUPER SIMPLE LINK DETECTOR (No Commands Needed)
+    # 🟢 NEW SMART PROMPT: Ask user for message count if they paste a link directly
     if uid not in Z:
         if m.text and ("t.me/" in m.text or "telegram.me/" in m.text):
             i, d, lt = E(m.text)
@@ -512,7 +511,6 @@ async def text_handler(c, m):
         await m.reply("Add your bot /setbot `token`")
         return
 
-    # User explicitly used old command
     if s == 'start':
         L = m.text
         i, d, lt = E(L)
@@ -521,7 +519,7 @@ async def text_handler(c, m):
             Z.pop(uid, None)
             return
         Z[uid].update({'step': 'count', 'cid': i, 'sid': d, 'lt': lt})
-        await m.reply_text('🔢 **Kitne messages nikalne hain?**\n👉 (Sirf ek message nikalna hai toh `1` likhein, ya Bulk/Batch ke liye total number bhejein)')
+        await m.reply_text('How many messages?')
 
     elif s == 'start_single':
         L = m.text
@@ -533,22 +531,22 @@ async def text_handler(c, m):
 
         Z[uid].update({'step': 'process_single', 'cid': i, 'sid': d, 'lt': lt})
         i, s, lt = Z[uid]['cid'], Z[uid]['sid'], Z[uid]['lt']
-        pt = await m.reply_text('⏳ Processing...')
+        pt = await m.reply_text('Processing...')
         
         ubot = UB.get(uid)
         if not ubot:
-            await pt.edit('❌ Add bot with /setbot first')
+            await pt.edit('Add bot with /setbot first')
             Z.pop(uid, None)
             return
         
         uc = await get_uclient(uid)
         if not uc:
-            await pt.edit('❌ Cannot proceed without user client.')
+            await pt.edit('Cannot proceed without user client.')
             Z.pop(uid, None)
             return
             
         if is_user_active(uid):
-            await pt.edit('❌ Active task exists. Use /stop first.')
+            await pt.edit('Active task exists. Use /stop first.')
             Z.pop(uid, None)
             return
 
@@ -558,40 +556,39 @@ async def text_handler(c, m):
                 res = await process_msg(ubot, uc, msg, str(m.chat.id), lt, uid, i)
                 await pt.edit(f'1/1: {res}')
             else:
-                await pt.edit('❌ Message not found')
+                await pt.edit('⚠️ Message not found! (Private Channel / Removed)')
         except Exception as e:
             await pt.edit(f'Error: {str(e)[:50]}')
         finally:
             Z.pop(uid, None)
 
-    # Handle both Single and Batch together based on count input
     elif s == 'count':
         if not m.text.isdigit():
-            await m.reply_text('❌ Kripya sirf number (digits) bhejein.')
+            await m.reply_text('❌ Enter valid number.')
             return
         
         count = int(m.text)
         maxlimit = PREMIUM_LIMIT if await is_premium_user(uid) else FREEMIUM_LIMIT
 
         if count > maxlimit:
-            await m.reply_text(f'❌ Maximum limit is {maxlimit}.')
+            await m.reply_text(f'Maximum limit is {maxlimit}.')
             return
 
         Z[uid].update({'step': 'process', 'did': str(m.chat.id), 'num': count})
         i, s, n, lt = Z[uid]['cid'], Z[uid]['sid'], Z[uid]['num'], Z[uid]['lt']
         success = 0
 
-        pt = await m.reply_text('⏳ Processing...')
+        pt = await m.reply_text('⏳ Processing batch...')
         uc = await get_uclient(uid)
         ubot = UB.get(uid)
         
         if not uc or not ubot:
-            await pt.edit('❌ Missing client setup')
+            await pt.edit('Missing client setup')
             Z.pop(uid, None)
             return
             
         if is_user_active(uid):
-            await pt.edit('❌ Active task exists')
+            await pt.edit('Active task exists')
             Z.pop(uid, None)
             return
         
@@ -626,12 +623,13 @@ async def text_handler(c, m):
                         if 'Done' in res or 'Copied' in res or 'Sent' in res or 'Forwarded' in res:
                             success += 1
                     else:
-                        pass
+                        await pt.edit(f'⚠️ **Skipped {mid}:** Bot ko access nahi mila (Deleted or Private).')
+                        await asyncio.sleep(2)
                 except Exception as e:
                     try: await pt.edit(f'{j+1}/{n}: Error - {str(e)[:30]}')
                     except: pass
                 
-                # Single file nikalte time zaroorat se zyada wait na kare
+                # Single message nikalte time zaroorat se zyada delay nahi lega
                 if n > 1:
                     delay_time = random.uniform(17.5, 35.8)
                     try: await pt.edit(f'Sleeping for {delay_time:.2f}s to act like human & prevent ban...')
@@ -639,7 +637,7 @@ async def text_handler(c, m):
                     await asyncio.sleep(delay_time)
             
             if j+1 == n:
-                await m.reply_text(f'🎉 **Task Completed** ✅ Success: {success}/{n}')
+                await m.reply_text(f'🎉 Batch Completed ✅ Success: {success}/{n}')
         
         finally:
             await remove_active_batch(uid)
