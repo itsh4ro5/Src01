@@ -68,7 +68,7 @@ SYSTEM_VERSION = "Android 14"
 APP_VERSION = "12.5.2"
 
 app = Client("m3u8_pro_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN, sleep_threshold=120)
-db_client = AsyncIOMotorClient(MONGO_URI)
+db_client = AsyncIOMotorClient(MONGO_DB)
 db = db_client["telegram_bot"]
 users_col = db["users"]
 queue_col = db["queue"]
