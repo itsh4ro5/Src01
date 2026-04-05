@@ -60,7 +60,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 API_ID = int(os.environ.get("API_ID", "123456")) 
 API_HASH = os.environ.get("API_HASH", "YOUR_API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN")
-MONGO_URI = os.environ.get("MONGO_URI", "YOUR_MONGODB_URI")
+MONGO_DB = os.environ.get("MONGO_DB", "YOUR_MONGODB_URI")
 OWNER_ID = int(os.environ.get("OWNER_ID", "123456789")) 
 
 DEVICE_MODEL = "realme P3 Pro 5G"
