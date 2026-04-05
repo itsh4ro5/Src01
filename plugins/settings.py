@@ -228,7 +228,6 @@ __👉 **Note:** if you are using custom bot then your bot should be admin that 
         event.data = b"thumb_settings"
         await callback_query_handler(event)
 
-
 async def start_conversation(event, user_id, conv_type, prompt_message):
     if user_id in active_conversations:
         await event.respond('Previous conversation cancelled. Starting new one.')
