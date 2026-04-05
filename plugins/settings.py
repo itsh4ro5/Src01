@@ -8,6 +8,7 @@ import os
 import asyncio
 import string
 import random
+import aiohttp  # 🟢 Added to download image from link
 from shared_client import client as gf
 from config import OWNER_ID
 from utils.func import get_user_data_key, save_user_data, users_collection
@@ -64,6 +65,21 @@ async def send_settings_message(chat_id, user_id):
     ]
     await gf.send_message(chat_id, MESS, buttons=buttons)
 
+# 🟢 HELPER FUNCTION TO RENDER THUMBNAIL SETTINGS WITHOUT ERROR 🟢
+async def render_thumb_settings(event, user_id):
+    current_font = await get_user_data_key(user_id, "thumb_font", "default.ttf")
+    current_color = await get_user_data_key(user_id, "thumb_color", "white")
+    font_name = AVAILABLE_FONTS.get(current_font, "Standard Font")
+    color_name = AVAILABLE_COLORS.get(current_color, "⚪ White")
+    
+    buttons = [
+        [Button.inline('🔠 Change Font Style', b'menu_fonts_0')],
+        [Button.inline('🖌 Change Font Color', b'menu_colors_0')],
+        [Button.inline('🔙 Back to Settings', b'back_to_main')]
+    ]
+    await event.edit(f'🎨 **Thumbnail Customization**\n\n• Current Font: {font_name}\n• Current Color: {color_name}\n\nKya change karna chahte hain?', buttons=buttons)
+
+
 @gf.on(events.CallbackQuery)
 async def callback_query_handler(event):
     user_id = event.sender_id
@@ -99,7 +115,8 @@ __👉 **Note:** if you are using custom bot then your bot should be admin that 
         },
         b'setthumb': {
             'type': 'setthumb',
-            'message': 'Please send the photo you want to set as the thumbnail.'
+            # 🟢 UPDATED PROMPT FOR IMAGE, URL & TEXT 🟢
+            'message': 'Please send the **Photo**, an **Image Link (URL)**, or type the **Text** you want to set as the thumbnail watermark.'
         }
     }
     
@@ -147,17 +164,7 @@ __👉 **Note:** if you are using custom bot then your bot should be admin that 
             
     # 🟢 THUMBNAIL CUSTOMIZATION PAGINATION 🟢
     elif data_str == 'thumb_settings':
-        current_font = await get_user_data_key(user_id, "thumb_font", "default.ttf")
-        current_color = await get_user_data_key(user_id, "thumb_color", "white")
-        font_name = AVAILABLE_FONTS.get(current_font, "Standard Font")
-        color_name = AVAILABLE_COLORS.get(current_color, "⚪ White")
-        
-        buttons = [
-            [Button.inline('🔠 Change Font Style', b'menu_fonts_0')],
-            [Button.inline('🖌 Change Font Color', b'menu_colors_0')],
-            [Button.inline('🔙 Back to Settings', b'back_to_main')]
-        ]
-        await event.edit(f'🎨 **Thumbnail Customization**\n\n• Current Font: {font_name}\n• Current Color: {color_name}\n\nKya change karna chahte hain?', buttons=buttons)
+        await render_thumb_settings(event, user_id)
         
     elif data_str == 'back_to_main':
         await event.delete()
@@ -218,15 +225,15 @@ __👉 **Note:** if you are using custom bot then your bot should be admin that 
         new_font = data_str.split("set_font_")[1]
         await save_user_data(user_id, "thumb_font", new_font)
         await event.answer(f"Font changed!", alert=True)
-        event.data = b"thumb_settings"
-        await callback_query_handler(event)
+        # 🟢 NO MORE ATTRIBUTE ERROR, CALLING HELPER INSTEAD 🟢
+        await render_thumb_settings(event, user_id)
         
     elif data_str.startswith('set_color_'):
         new_color = data_str.split("set_color_")[1]
         await save_user_data(user_id, "thumb_color", new_color)
         await event.answer(f"Color changed!", alert=True)
-        event.data = b"thumb_settings"
-        await callback_query_handler(event)
+        # 🟢 NO MORE ATTRIBUTE ERROR, CALLING HELPER INSTEAD 🟢
+        await render_thumb_settings(event, user_id)
 
 async def start_conversation(event, user_id, conv_type, prompt_message):
     if user_id in active_conversations:
@@ -245,7 +252,7 @@ async def cancel_conversation(event):
 @gf.on(events.NewMessage())
 async def handle_conversation_input(event):
     user_id = event.sender_id
-    if user_id not in active_conversations or event.message.text.startswith('/'):
+    if user_id not in active_conversations or event.message.text and event.message.text.startswith('/'):
         return
         
     conv_type = active_conversations[user_id]['type']
@@ -268,24 +275,24 @@ async def handle_conversation_input(event):
 
 async def handle_setchat(event, user_id):
     try:
-        chat_id = event.text.strip()
+        chat_id = event.message.text.strip()
         await save_user_data(user_id, 'chat_id', chat_id)
         await event.respond('✅ Chat ID set successfully!')
     except Exception as e:
         await event.respond(f'❌ Error setting chat ID: {e}')
 
 async def handle_setrename(event, user_id):
-    rename_tag = event.text.strip()
+    rename_tag = event.message.text.strip()
     await save_user_data(user_id, 'rename_tag', rename_tag)
     await event.respond(f'✅ Rename tag set to: {rename_tag}')
 
 async def handle_setcaption(event, user_id):
-    caption = event.text
+    caption = event.message.text
     await save_user_data(user_id, 'caption', caption)
     await event.respond(f'✅ Caption set successfully!')
 
 async def handle_setreplacement(event, user_id):
-    match = re.match("'(.+)' '(.+)'", event.text)
+    match = re.match("'(.+)' '(.+)'", event.message.text)
     if not match:
         await event.respond("❌ Invalid format. Usage: 'WORD(s)' 'REPLACEWORD'")
     else:
@@ -300,7 +307,7 @@ async def handle_setreplacement(event, user_id):
             await event.respond(f"✅ Replacement saved: '{word}' will be replaced with '{replace_word}'")
 
 async def handle_addsession(event, user_id):
-    session_string = event.text.strip()
+    session_string = event.message.text.strip()
     await save_user_data(user_id, 'session_string', session_string)
     await event.respond('✅ Session string added successfully!')
 
@@ -311,6 +318,7 @@ async def handle_deleteword(event, user_id):
     await save_user_data(user_id, 'delete_words', delete_words)
     await event.respond(f"✅ Words added to delete list: {', '.join(words_to_delete)}")
 
+# 🟢 UPDATED: HANDLE IMAGE, URL, OR TEXT WATERMARK 🟢
 async def handle_setthumb(event, user_id):
     if event.photo:
         temp_path = await event.download_media()
@@ -319,11 +327,29 @@ async def handle_setthumb(event, user_id):
             if os.path.exists(thumb_path):
                 os.remove(thumb_path)
             os.rename(temp_path, thumb_path)
-            await event.respond('✅ Thumbnail saved successfully!')
+            await event.respond('✅ Thumbnail photo saved successfully!')
         except Exception as e:
             await event.respond(f'❌ Error saving thumbnail: {e}')
+    elif event.message.text:
+        text = event.message.text.strip()
+        if text.startswith('http://') or text.startswith('https://'):
+            status_msg = await event.respond('⏳ Downloading image from link...')
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(text) as resp:
+                        if resp.status == 200:
+                            with open(f'{user_id}.jpg', 'wb') as f:
+                                f.write(await resp.read())
+                            await status_msg.edit('✅ Thumbnail image downloaded and saved successfully!')
+                        else:
+                            await status_msg.edit(f'❌ Failed to download image. HTTP Status: {resp.status}')
+            except Exception as e:
+                await status_msg.edit(f'❌ Error downloading image: {e}')
+        else:
+            await save_user_data(user_id, 'watermark', text)
+            await event.respond(f'✅ Thumbnail text (Watermark) set to: {text}')
     else:
-        await event.respond('❌ Please send a photo. Operation cancelled.')
+        await event.respond('❌ Please send a photo, an image link, or text. Operation cancelled.')
 
 def generate_random_name(length=7):
     characters = string.ascii_letters + string.digits
