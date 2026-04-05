@@ -15,7 +15,7 @@ from utils.func import get_user_data_key, save_user_data, users_collection
 try:
     from theme_config import AVAILABLE_FONTS, AVAILABLE_COLORS, FONT_DIR
 except ImportError:
-    AVAILABLE_FONTS = {"default.ttf": "Standard"}
+    AVAILABLE_FONTS = {"default.ttf": "Standard Font"}
     AVAILABLE_COLORS = {"white": "⚪ White"}
     FONT_DIR = "fonts"
 
@@ -145,7 +145,7 @@ __👉 **Note:** if you are using custom bot then your bot should be admin that 
         except FileNotFoundError:
             await event.respond('No thumbnail found to remove.')
             
-    # 🟢 THUMBNAIL CUSTOMIZATION LOGIC 🟢
+    # 🟢 THUMBNAIL CUSTOMIZATION PAGINATION 🟢
     elif data_str == 'thumb_settings':
         current_font = await get_user_data_key(user_id, "thumb_font", "default.ttf")
         current_color = await get_user_data_key(user_id, "thumb_color", "white")
@@ -330,7 +330,7 @@ def generate_random_name(length=7):
     characters = string.ascii_letters + string.digits
     return ''.join(random.choice(characters) for _ in range(length))
 
-# 🟢 IGNORECASE FIX FOR FILE RENAMING
+# 🟢 CASE-INSENSITIVE FILE RENAMING
 async def rename_file(file, sender, edit):
     try:
         delete_words = await get_user_data_key(sender, 'delete_words', [])
@@ -354,7 +354,6 @@ async def rename_file(file, sender, edit):
             original_file_name = str(file)
             file_extension = 'mp4'
         
-        # 🟢 re.IGNORECASE FIX HERE 🟢
         for word in delete_words:
             original_file_name = re.sub(re.escape(word), '', original_file_name, flags=re.IGNORECASE)
         
