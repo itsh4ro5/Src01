@@ -17,6 +17,13 @@ from utils.custom_filters import login_in_progress
 from utils.encrypt import dcs
 from typing import Dict, Any, Optional
 
+# 🟢 Pillow Library import for custom thumbnail watermark
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    print("⚠️ Pillow not installed! Run 'pip install Pillow'")
+    Image, ImageDraw, ImageFont = None, None, None
+
 # 🟢 LOGGING SETUP
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -235,6 +242,61 @@ async def prog(c, t, C, h, m, st):
         except: pass
         if p >= 100: P.pop(m, None)
 
+# 🟢 CAPTION BEAUTIFIER & CUSTOM THUMBNAIL LOGIC
+def beautify_caption(text):
+    if not text: return ""
+    replacements = {
+        r"(?i)Index\s*:": "\nIndex:",
+        r"(?i)Title\s*:": "\n\nTitle:",
+        r"(?i)Topic\s*:": "\n\nTopic:",
+        r"(?i)Batch\s*:": "\n\nBatch:",
+        r"(?i)Extracted By\s*:": "\n\nExtracted By:",
+        r"(?i)Quality\s*:": "\n\nQuality:",
+        r"(?i)Size\s*:": "\n\nSize:"
+    }
+    for pattern, new_text in replacements.items(): 
+        text = re.sub(pattern, new_text, text)
+    text = re.sub(r'\n\s*\n', '\n\n', text).strip()
+    return text
+
+async def add_thumbnail_watermark(video_path, uid):
+    if not video_path or not Image: return None
+    try:
+        thumb_path = f"{video_path}_thumb.jpg"
+        cmd = ["ffmpeg", "-i", video_path, "-ss", "00:00:01", "-vframes", "1", "-y", thumb_path, "-loglevel", "quiet"]
+        proc = await asyncio.create_subprocess_exec(*cmd)
+        await proc.wait()
+        
+        if os.path.exists(thumb_path):
+            img = Image.open(thumb_path)
+            draw = ImageDraw.Draw(img)
+            
+            # Using default bold font logic for custom watermark text
+            try:
+                # Assuming standard TTF location or default
+                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(img.width/15))
+            except:
+                font = ImageFont.load_default()
+            
+            wm_text = "IT'S H4R"
+            
+            # Box setup behind text for readability
+            text_bbox = draw.textbbox((0, 0), wm_text, font=font)
+            text_width = text_bbox[2] - text_bbox[0]
+            text_height = text_bbox[3] - text_bbox[1]
+            x = (img.width - text_width) / 2
+            y = (img.height - text_height) / 2
+            
+            box_padding = int(img.width/50)
+            draw.rectangle([x - box_padding, y - box_padding, x + text_width + box_padding, y + text_height + box_padding], fill=(0, 0, 0, 150))
+            
+            draw.text((x, y), wm_text, font=font, fill="white")
+            img.save(thumb_path)
+            return thumb_path
+    except Exception as e:
+        logger.error(f"Thumbnail Watermark Error: {e}")
+    return None
+
 async def send_direct(c, m, tcid, ft=None, rtmid=None):
     try:
         if m.video:
@@ -286,7 +348,10 @@ async def process_msg(c, u, m, d, lt, uid, i):
             orig_text = m.caption.markdown if m.caption else ''
             proc_text = await process_text_with_rules(d, orig_text)
             user_cap = await get_user_data_key(d, 'caption', '')
-            ft = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
+            raw_caption = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
+            
+            # Apply new caption beautifier
+            ft = beautify_caption(raw_caption)
             
             is_restricted = getattr(m.chat, "has_protected_content", False)
             
@@ -378,7 +443,12 @@ async def process_msg(c, u, m, d, lt, uid, i):
                     f = renamed_f
             
             fsize = os.path.getsize(f) / (1024 * 1024 * 1024)
-            th = thumbnail(d)
+            th = None
+            
+            if m.video or str(f).endswith(('.mp4', '.mkv')):
+                 th = await add_thumbnail_watermark(f, uid)
+            if not th:
+                 th = thumbnail(d)
             
             if fsize > 2 and Y:
                 logger.warning("File > 2GB detected. Routing through alternative Y Client (LOG_GROUP).")
@@ -387,7 +457,6 @@ async def process_msg(c, u, m, d, lt, uid, i):
                 await upd_dlg(Y)
                 mtd = await get_video_metadata(f)
                 dur, h, w = mtd['duration'], mtd['width'], mtd['height']
-                th = await screenshot(f, dur, d)
                 
                 send_funcs = {'video': Y.send_video, 'video_note': Y.send_video_note, 
                             'voice': Y.send_voice, 'audio': Y.send_audio, 
@@ -429,7 +498,6 @@ async def process_msg(c, u, m, d, lt, uid, i):
                 elif m.video or file_ext in video_extensions:
                     mtd = await get_video_metadata(f)
                     dur, h, w = mtd['duration'], mtd['width'], mtd['height']
-                    th = await screenshot(f, dur, d)
                     await c.send_video(tcid, video=f, caption=ft if m.caption else None, 
                                     thumb=th, width=w, height=h, duration=dur, 
                                     progress=prog, progress_args=(c, d, p.id, st), 
@@ -471,8 +539,9 @@ async def process_msg(c, u, m, d, lt, uid, i):
             orig_text = m.text.markdown
             proc_text = await process_text_with_rules(d, orig_text)
             user_cap = await get_user_data_key(d, 'caption', '')
-            ft = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
+            raw_caption = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
             
+            ft = beautify_caption(raw_caption)
             await c.send_message(tcid, text=ft if ft else orig_text, reply_to_message_id=rtmid)
             return 'Sent.'
         else:
@@ -521,6 +590,17 @@ async def cancel_cmd(c, m):
     else:
         await m.reply_text('No active batch process found.')
 
+# 🟢 ADDED ID COMMAND 
+@X.on_message(filters.command("id"))
+async def get_id_cmd(client, message):
+    text = f"🆔 **Current Chat ID:** `{message.chat.id}`\n"
+    if message.reply_to_message:
+        if message.reply_to_message.forward_from_chat: 
+            text += f"📢 **Forwarded Chat ID:** `{message.reply_to_message.forward_from_chat.id}`\n"
+        elif message.reply_to_message.forward_from: 
+            text += f"👤 **Forwarded User ID:** `{message.reply_to_message.forward_from.id}`\n"
+    await message.reply(text)
+
 @X.on_message(filters.command("forward"))
 async def toggle_forward(c, m):
     uid = m.from_user.id
@@ -535,7 +615,7 @@ async def toggle_forward(c, m):
 
 @X.on_message(filters.text & filters.private & ~login_in_progress & ~filters.command([
     'start', 'batch', 'cancel', 'login', 'logout', 'stop', 'set', 
-    'pay', 'redeem', 'gencode', 'single', 'generate', 'keyinfo', 'encrypt', 'decrypt', 'keys', 'setbot', 'rembot', 'forward']))
+    'pay', 'redeem', 'gencode', 'single', 'generate', 'keyinfo', 'encrypt', 'decrypt', 'keys', 'setbot', 'rembot', 'forward', 'id']))
 async def text_handler(c, m):
     uid = m.from_user.id
     
