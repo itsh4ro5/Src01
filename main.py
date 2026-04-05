@@ -1,16 +1,14 @@
-import os
-import re
-import time
-import math
-import asyncio
-import logging
-import subprocess
-import urllib3
-import aiohttp
-from datetime import datetime, timedelta
+# Copyright (c) 2025 devgagan : https://github.com/devgaganin.  
+# Licensed under the GNU General Public License v3.0.  
 
-# 🟢 IMPORT NEW CONFIGURATION FILE
-from theme_config import AVAILABLE_FONTS, AVAILABLE_COLORS, FONT_DIR
+import os
+import sys
+import random
+import time
+import asyncio
+import importlib
+from pyrogram import filters
+from pyrogram.types import BotCommand, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
 # 🟢 SPEED BOOST: Activate Ultra-Fast Async Engine
 try:
@@ -20,79 +18,94 @@ try:
     asyncio.set_event_loop(loop)
     print("⚡ uvloop activated! Async operations will run at max speed.")
 except ImportError:
-    print("⚠️ uvloop not installed. Standard asyncio will be used.")
+    print("⚠️ uvloop not installed. Standard asyncio will be used. (pip install uvloop)")
 
-# 🟢 PDF Watermark Library
-try:
-    import fitz
-except ImportError:
-    fitz = None
-
-# 🟢 Fast Downloader Library
-try:
-    import yt_dlp
-except ImportError:
-    yt_dlp = None
-
-# 🟢 Pillow Library for Advanced Thumbnail Font Watermarking
-try:
-    from PIL import Image, ImageDraw, ImageFont
-except ImportError:
-    Image, ImageDraw, ImageFont = None, None, None
-    print("⚠️ Pillow not installed! Run 'pip install Pillow'")
-
-from pyrogram import Client, filters, enums
-from pyrogram.errors import SessionPasswordNeeded, PhoneCodeInvalid, FloodWait, PeerIdInvalid
-from pyrogram.types import Message, BotCommand, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from motor.motor_asyncio import AsyncIOMotorClient
-from flask import Flask
-from threading import Thread
-
-# Logs Optimization
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logging.getLogger("pyrogram").setLevel(logging.WARNING) 
-logging.getLogger("asyncio").setLevel(logging.WARNING) 
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+from shared_client import start_client, app
+import utils.func as global_state
 
 # ==========================================
-# 1. CONFIGURATION
+# 🎨 FONTS & COLORS CONFIGURATION
 # ==========================================
-API_ID = int(os.environ.get("API_ID", "123456")) 
-API_HASH = os.environ.get("API_HASH", "YOUR_API_HASH")
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN")
-MONGO_DB = os.environ.get("MONGO_DB", "YOUR_MONGODB_URI")
-OWNER_ID = int(os.environ.get("OWNER_ID", "123456789")) 
+# 📂 FONT FOLDER PATH - Is folder me aapko apni saari .ttf files upload karni hain
+FONT_DIR = "fonts"
+if not os.path.exists(FONT_DIR):
+    os.makedirs(FONT_DIR)
 
-DEVICE_MODEL = "realme P3 Pro 5G"
-SYSTEM_VERSION = "Android 14"
-APP_VERSION = "12.5.2"
+AVAILABLE_FONTS = {
+    "default.ttf": "Standard Font",
+    "impact.ttf": "𝗕𝗢𝗟𝗗 𝗜𝗠𝗣𝗔𝗖𝗧",
+    "hacker.ttf": "🄷🄰🄲🄺🄴🅁 🄶🄻🄸🅃🄲🄷",
+    "comic.ttf": "𝘊𝘰𝘮𝘪𝘤 𝘚𝘵𝘺𝘭𝘦",
+    "neon.ttf": "Nҽ𝘰n Lιg𝘩t",
+    "cyber.ttf": "C Y B E R",
+    "pixel.ttf": "P1X3L 8-B1T",
+    "roboto.ttf": "Roboto Clean",
+    "arial_bold.ttf": "Arial Bold",
+    "gothic.ttf": "𝕲𝘰𝘵𝘩𝘪𝘤 𝕯𝘢𝘳𝘬",
+    "matrix.ttf": "MΛTRIX",
+    "vintage.ttf": "𝓥𝘪𝘯𝘵𝘢𝘨𝘦 𝓡𝘦𝘵𝘳𝘰",
+    "future.ttf": "F U T U R E",
+    "monster.ttf": "M O N S T E R",
+    "cursive.ttf": "𝓒𝓾𝓻𝓼𝓲𝓿𝓮 𝓛𝓸𝓿𝓮",
+    "elegant.ttf": "𝔼𝘭𝘦𝘨𝘢𝘯𝘵 𝕾𝘦𝘳𝘪𝘧",
+    "space.ttf": "S P A C E",
+    "bold_italic.ttf": "𝘽𝗼𝙡𝗱 𝙄𝙩𝙖𝙡𝙞𝙘",
+    "typewriter.ttf": "Tʏp𝘦wʀiᴛeʀ",
+    "graffiti.ttf": "G𝕣a𝘧fιt𝘪",
+    "ninja.ttf": "🥷 N I N J A"
+}
 
-app = Client("m3u8_pro_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN, sleep_threshold=120)
-db_client = AsyncIOMotorClient(MONGO_DB)
-db = db_client["telegram_bot"]
-users_col = db["users"]
-queue_col = db["queue"]
-bot_chats_col = db["bot_chats"] 
-
-web_app = Flask(__name__)
-@web_app.route('/')
-def home(): return "Pro Max Bot is Alive!"
-def run_web(): 
-    try: web_app.run(host="0.0.0.0", port=7860)
-    except: pass
-
-login_clients = {} 
+AVAILABLE_COLORS = {
+    "white": "⚪ White", "black": "⚫ Black", "red": "🔴 Red", "blue": "🔵 Blue", 
+    "green": "🟢 Green", "yellow": "🟡 Yellow", "orange": "🟠 Orange", "purple": "🟣 Purple",
+    "brown": "🟤 Brown", "pink": "🌸 Pink", "gray": "🔘 Gray", "silver": "🪙 Silver",
+    "#39FF14": "🟢 Neon Green", "#00FFFF": "🔵 Cyan / Aqua", "#FF00FF": "🟣 Magenta", 
+    "#FF1493": "💖 Deep Pink", "#00FF00": "🟩 Lime", "#FFFF00": "🟨 Cyber Yellow",
+    "#FF4500": "🔥 Orange Red", "#8A2BE2": "🎀 Deep Pink", "#7FFF00": "🎾 Chartreuse",
+    "#FFD700": "🟡 Gold", "#DAA520": "🍯 Goldenrod", "#B8860B": "🪙 Dark Goldenrod",
+    "#CD7F32": "🏆 Peru / Bronze", "#C0C0C0": "⚙️ Silver Pro", "#E5E4E2": "💿 Platinum",
+    "#1E90FF": "🌊 Dodger Blue", "#00BFFF": "💦 Deep Sky Blue", "#4682B4": "👖 Steel Blue",
+    "#4169E1": "🧿 Royal Blue", "#000080": "🌌 Navy", "#191970": "🌃 Midnight Blue",
+    "#00CED1": "💧 Dark Turquoise", "#5F9EA0": "🎽 Cadet Blue", "#ADD8E6": "🧊 Light Blue",
+    "#DC143C": "🩸 Crimson", "#B22222": "🧱 Firebrick", "#8B0000": "🍷 Dark Red",
+    "#FF69B4": "👙 Hot Pink", "#FFB6C1": "🩰 Light Pink", "#C71585": "🌺 Medium Violet Red",
+    "#FA8072": "🍣 Salmon", "#E9967A": "🦐 Dark Salmon", "#F08080": "🥩 Light Coral",
+    "#228B22": "🌲 Forest Green", "#006400": "🌳 Dark Green", "#2E8B57": "🌿 Sea Green",
+    "#3CB371": "🍀 Medium Sea Green", "#8FBC8F": "🔋 Dark Sea Green", "#98FB98": "🍵 Pale Green",
+    "#00FA9A": "🍈 Medium Spring Green", "#9ACD32": "🥝 Yellow Green", "#6B8E23": "🫒 Olive Drab",
+    "#800080": "🍇 Purple", "#9370DB": "🍆 Medium Purple", "#8B008B": "🔮 Dark Magenta",
+    "#9400D3": "🍠 Dark Violet", "#9932CC": "🌂 Dark Orchid", "#BA55D3": "👚 Medium Orchid",
+    "#DDA0DD": "🪻 Plum", "#EE82EE": "🪁 Violet", "#DA70D6": "🪀 Orchid",
+    "#FF8C00": "🎃 Dark Orange", "#D2691E": "🐫 Goldenrod", "#8B4513": "👞 Saddle Brown",
+    "#A0522D": "🧳 Sienna", "#D2B48C": "🐪 Tan", "#DEB887": "🪵 Burlywood",
+    "#F4A460": "🪑 Sandy Brown", "#BC8F8F": "🏕️ Rosy Brown", "#F0E68C": "🌾 Khaki",
+    "#FFDAB9": "🍑 Peach Puff", "#FFE4B5": "🥟 Moccasin", "#FFEFD5": "🧈 Papaya Whip",
+    "#FFFACD": "🍋 Lemon Chiffon", "#FAFAD2": "🍌 Light Goldenrod", "#E0FFFF": "🧼 Light Cyan",
+    "#F0FFF0": "🍯 Honeydew", "#F5FFFA": "🥛 Mint Cream", "#F0F8FF": "🥣 Alice Blue",
+    "#FFF0F5": "🧂 Lavender Blush", "#FFE4E1": "🌸 Misty Rose", "#FFF5EE": "🐚 Seashell",
+    "#2F4F4F": "🪨 Dark Slate Gray", "#708090": "🗻 Slate Gray", "#A9A9A9": "🐭 Dark Gray",
+    "#696969": "🐘 Dim Gray", "#778899": "🦈 Light Slate Gray", "#2C3E50": "🌚 Dark Blue Gray"
+}
 
 # ==========================================
-# UI SETTINGS & CALLBACKS (PAGINATED)
+# 🛠️ UI COMMANDS: ID & SETTINGS
 # ==========================================
+@app.on_message(filters.command("id"))
+async def get_id_cmd(client, message):
+    text = f"🆔 **Current Chat ID:** `{message.chat.id}`\n"
+    if message.reply_to_message:
+        if message.reply_to_message.forward_from_chat: 
+            text += f"📢 **Forwarded Chat ID:** `{message.reply_to_message.forward_from_chat.id}`\n"
+        elif message.reply_to_message.forward_from: 
+            text += f"👤 **Forwarded User ID:** `{message.reply_to_message.forward_from.id}`\n"
+    await message.reply(text)
+
 @app.on_message(filters.command("settings") & filters.private)
 async def settings_command(client, message):
     user_id = message.from_user.id
-    user = await users_col.find_one({"_id": user_id}) or {}
+    current_font = await global_state.get_user_data_key(user_id, "thumb_font", "default.ttf")
+    current_color = await global_state.get_user_data_key(user_id, "thumb_color", "white")
     
-    current_font = user.get("thumb_font", "default.ttf")
-    current_color = user.get("thumb_color", "white")
     font_name = AVAILABLE_FONTS.get(current_font, "Standard Font")
     color_name = AVAILABLE_COLORS.get(current_color, "⚪ White")
     
@@ -127,15 +140,16 @@ async def callback_handler(client, call: CallbackQuery):
         await call.message.edit_text("🎨 **Thumbnail Customization**\nKya change karna chahte hain?", reply_markup=keyboard)
         
     elif data == "menu_main":
-        user = await users_col.find_one({"_id": user_id}) or {}
-        current_font = user.get("thumb_font", "default.ttf")
-        current_color = user.get("thumb_color", "white")
+        current_font = await global_state.get_user_data_key(user_id, "thumb_font", "default.ttf")
+        current_color = await global_state.get_user_data_key(user_id, "thumb_color", "white")
+        font_name = AVAILABLE_FONTS.get(current_font, "Standard Font")
+        color_name = AVAILABLE_COLORS.get(current_color, "⚪ White")
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🎨 Thumbnail Customize", callback_data="menu_thumb_custom")],
             [InlineKeyboardButton("❌ Close", callback_data="close_menu")]
         ])
         await call.message.edit_text(
-            f"⚙️ **BOT SETTINGS PANEL**\n\n🎨 **Current Style:**\n• Font: {AVAILABLE_FONTS.get(current_font, 'Standard Font')}\n• Color: {AVAILABLE_COLORS.get(current_color, '⚪ White')}", 
+            f"⚙️ **BOT SETTINGS PANEL**\n\n🎨 **Current Style:**\n• Font: {font_name}\n• Color: {color_name}", 
             reply_markup=keyboard
         )
         
@@ -162,11 +176,11 @@ async def callback_handler(client, call: CallbackQuery):
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data="menu_thumb_custom")])
         
         await call.message.edit_text(
-            f"🔠 **Select Font Style (Page {page+1}):**\n*(Upload {FONT_DIR}/ folder me apni TTF files dalna na bhulein)*", 
+            f"🔠 **Select Font Style (Page {page+1}):**\n*(Ensure {FONT_DIR}/ folder has these .ttf files)*", 
             reply_markup=InlineKeyboardMarkup(buttons)
         )
         
-    # 🟢 PAGINATED COLORS MENU (100+ Colors handle karne ke liye)
+    # 🟢 PAGINATED COLORS MENU
     elif data.startswith("menu_colors_"):
         page = int(data.split("_")[2])
         color_keys = list(AVAILABLE_COLORS.keys())
@@ -200,210 +214,88 @@ async def callback_handler(client, call: CallbackQuery):
         
     elif data.startswith("set_font_"):
         new_font = data.split("set_font_")[1]
-        await users_col.update_one({"_id": user_id}, {"$set": {"thumb_font": new_font}}, upsert=True)
+        await global_state.save_user_data(user_id, "thumb_font", new_font)
         await call.answer(f"Font changed to {AVAILABLE_FONTS.get(new_font)}!", show_alert=True)
         await callback_handler(client, call._modify(data="menu_thumb_custom"))
         
     elif data.startswith("set_color_"):
         new_color = data.split("set_color_")[1]
-        await users_col.update_one({"_id": user_id}, {"$set": {"thumb_color": new_color}}, upsert=True)
+        await global_state.save_user_data(user_id, "thumb_color", new_color)
         await call.answer(f"Color changed to {AVAILABLE_COLORS.get(new_color)}!", show_alert=True)
         await callback_handler(client, call._modify(data="menu_thumb_custom"))
 
 # ==========================================
-# HELPERS & PROCESSING
+# 🧠 CORE SYSTEM & PLUGINS LOADER
 # ==========================================
-async def check_access(user_id):
-    if user_id == OWNER_ID: return True
-    user = await users_col.find_one({"_id": user_id})
-    if user and user.get("role") == "admin": return True
-    return False
+async def human_behavior_routine():
+    while True:
+        active_time = random.uniform(10500.5, 11000.2)
+        await asyncio.sleep(active_time)
+        print("Taking a ~20-minute human-like break to prevent bans...")
+        global_state.IS_PAUSED = True
+        sleep_time = random.uniform(1150.7, 1250.3)
+        await asyncio.sleep(sleep_time)
+        print("Waking up from break...")
+        global_state.IS_PAUSED = False
 
-def format_bytes(size):
-    power = 2**10
-    n = 0
-    power_labels = {0: '', 1: 'K', 2: 'M', 3: 'G', 4: 'T'}
-    while size > power:
-        size /= power; n += 1
-    return f"{size:.2f} {power_labels[n]}B"
+async def setup_bot_commands():
+    try:
+        await app.set_bot_commands([
+            BotCommand("start", "Start the bot & check status"),
+            BotCommand("login", "Login to save private restricted content"),
+            BotCommand("logout", "Logout from your current session"),
+            BotCommand("batch", "Extract multiple restricted messages"),
+            BotCommand("single", "Extract a single restricted message"),
+            BotCommand("dl", "Download video from YouTube/Insta/etc"),
+            BotCommand("adl", "Download audio from YouTube/Insta/etc"),
+            BotCommand("forward", "Toggle Fast Forward Mode (No Download)"),
+            BotCommand("settings", "🎨 Customize Thumbnail Fonts & Colors"),
+            BotCommand("id", "🆔 Get Chat or User ID"),
+            BotCommand("cancel", "Cancel the currently active batch task"),
+            BotCommand("setbot", "Set your custom bot token"),
+            BotCommand("rembot", "Remove your custom bot token")
+        ])
+        print("✅ Bot command menu set successfully!")
+    except Exception as e:
+        print(f"⚠️ Failed to set bot commands: {e}")
 
-async def safe_edit(message, text):
-    try: await message.edit_text(text)
-    except: pass
-
-async def upload_progress(current, total, message, start_time, state, title="", topic="", index_no=""):
-    now = time.time()
-    diff = max(now - start_time, 1)
-    if now - state[0] < 15 and current != total: return
-    state[0] = now
-    percentage = current * 100 / total
-    bar = "█" * int(math.floor(percentage / 10)) + "░" * (10 - int(math.floor(percentage / 10)))
-    text = f"🚀 **UPLOADING...**\n"
-    if index_no: text += f"🔢 **Index:** {index_no}\n"
-    text += f"🎬 **Title:** {title[:30]}...\n[{bar}] {percentage:.2f}%\n⚡ **Speed:** {format_bytes(current / diff)}/s"
-    await safe_edit(message, text)
-
-async def download_progress(current, total, message, start_time, state, title="", topic="", index_no=""):
-    now = time.time()
-    diff = max(now - start_time, 1)
-    if now - state[0] < 15 and current != total: return
-    state[0] = now
-    percentage = current * 100 / total
-    bar = "█" * int(math.floor(percentage / 10)) + "░" * (10 - int(math.floor(percentage / 10)))
-    text = f"📥 **DOWNLOADING...**\n"
-    if index_no: text += f"🔢 **Index:** {index_no}\n"
-    text += f"🎬 **Title:** {title[:30]}...\n[{bar}] {percentage:.2f}%\n⚡ **Speed:** {format_bytes(current / diff)}/s"
-    await safe_edit(message, text)
-
-def beautify_caption(text):
-    if not text: return ""
-    text = re.sub(r"(?i)\n*Index\s*:", "Index:", text)
-    text = re.sub(r"(?i)\n*Title\s*:", "\n\nTitle:", text)
-    text = re.sub(r"(?i)\n*Topic\s*:", "\n\nTopic:", text)
-    text = re.sub(r"(?i)\n*Batch\s*:", "\n\nBatch:", text)
-    text = re.sub(r"(?i)\n*Extracted By\s*:", "\n\nExtracted By:", text)
-    text = re.sub(r'\n{3,}', '\n\n', text).strip()
-    return text
-
-# 🟢 DYNAMIC FONT & COLOR WATERMARK ENGINE
-async def generate_thumbnail(video_path, watermark="", font_file="default.ttf", font_color="white"):
-    if not video_path or not os.path.exists(video_path): return None
-    if not Image: return None
-    thumb_path = f"{video_path}_thumb.jpg"
-    
-    cmd = ["ffmpeg", "-i", video_path, "-ss", "00:00:01", "-vframes", "1", "-y", thumb_path, "-loglevel", "quiet"]
-    proc = await asyncio.create_subprocess_exec(*cmd)
-    await proc.wait()
-
-    if not os.path.exists(thumb_path): return None
-    if watermark and watermark.lower() != "skip":
-        try:
-            def apply_pil_watermark():
-                img = Image.open(thumb_path).convert("RGBA")
-                draw = ImageDraw.Draw(img)
-                try:
-                    font_size = int(img.width / 12)
-                    # 🟢 Loads font from the 'fonts/' directory dynamically
-                    actual_font_path = os.path.join(FONT_DIR, font_file)
-                    font = ImageFont.truetype(actual_font_path, font_size)
-                except IOError:
-                    font = ImageFont.load_default()
-                
-                bbox = draw.textbbox((0, 0), watermark, font=font)
-                w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-                x, y = (img.width - w) / 2, (img.height - h) / 2
-                
-                pad = int(img.width/50)
-                draw.rectangle([x-pad, y-pad, x+w+pad, y+h+pad], fill=(0,0,0,150))
-                
-                # Dark Outline/Shadow for contrast
-                shadow_color = "black" if font_color != "black" else "white"
-                for dx in [-2, 0, 2]:
-                    for dy in [-2, 0, 2]:
-                        draw.text((x+dx, y+dy), watermark, font=font, fill=shadow_color)
-                        
-                # Dynamic Selected Color
-                draw.text((x, y), watermark, font=font, fill=font_color)
-                img.convert('RGB').save(thumb_path, "JPEG", quality=95)
-
-            await asyncio.to_thread(apply_pil_watermark)
-        except Exception as e: print(f"Watermark Error: {e}")
-    return thumb_path
-
-# ==========================================
-# COMMANDS
-# ==========================================
-@app.on_message(filters.command(["start", "help"]) & filters.private)
-async def start_cmd(client, message):
-    await users_col.update_one({"_id": message.from_user.id}, {"$set": {"state": "idle"}}, upsert=True)
-    if await check_access(message.from_user.id):
-        text = (
-            f"⚡️ **𝗪𝗘𝗟𝗖𝗢𝗠𝗘 𝗧𝗢 𝗠𝟯𝗨𝟴 𝗣𝗥𝗢** ⚡️\n\n"
-            "🔹 `/loginsrc` ➜ Connect Extractor\n"
-            "🔹 `/loginup` ➜ Connect Uploader\n"
-            "🔹 `/settings` ➜ 🎨 Thumbnail Fonts & Colors\n"
-            "🔹 `/watermark` ➜ Default Text\n"
-            "🔹 `/src` ➜ Advanced Clone\n"
-            "🔹 `/id` ➜ Get User/Chat ID\n"
-        )
-        await message.reply(text)
-
-@app.on_message(filters.command("id"))
-async def get_id_cmd(client, message):
-    text = f"🆔 **Current Chat ID:** `{message.chat.id}`\n"
-    if message.reply_to_message:
-        if message.reply_to_message.forward_from_chat: 
-            text += f"📢 **Forwarded Chat ID:** `{message.reply_to_message.forward_from_chat.id}`\n"
-        elif message.reply_to_message.forward_from: 
-            text += f"👤 **Forwarded User ID:** `{message.reply_to_message.forward_from.id}`\n"
-    await message.reply(text)
-
-@app.on_message(filters.command("watermark") & filters.private)
-async def watermark_cmd(client, message):
-    if len(message.command) < 2: return await message.reply("❌ Use: `/watermark YourName`")
-    wm_text = message.text.split(None, 1)[1]
-    await users_col.update_one({"_id": message.from_user.id}, {"$set": {"watermark": wm_text}}, upsert=True)
-    await message.reply(f"✅ **Default Watermark Saved:** {wm_text}")
-
-@app.on_message(filters.command("src") & filters.private)
-async def src_cmd(client, message):
-    if not await check_access(message.from_user.id): return
-    await users_col.update_one({"_id": message.from_user.id}, {"$set": {"state": "waiting_for_src_link"}})
-    await message.reply("🔗 Send **Message Link** (Source message).")
-
-# ==========================================
-# MAIN LOGIC (State Machine)
-# ==========================================
-@app.on_message(filters.text & filters.private & ~filters.command(["start", "settings", "id", "watermark", "src"]))
-async def handle_steps(client, message):
-    user_id = message.from_user.id
-    if not await check_access(user_id): return
-    user = await users_col.find_one({"_id": user_id})
-    if not user: return
-    state = user.get("state")
-    text = message.text.strip()
-    
-    if state == "waiting_for_src_link":
-        if "t.me/" not in text: return await message.reply("❌ Invalid Link!")
-        await users_col.update_one({"_id": user_id}, {"$set": {"state": "waiting_for_src_remove", "src_link": text}})
-        await message.reply("🧹 **Word Removal System**\nWords to delete? (Comma separated, `/d` for none)")
-
-    elif state == "waiting_for_src_remove":
-        remove_list = [w.strip() for w in text.split(",")] if text != "/d" else []
-        await users_col.update_one({"_id": user_id}, {"$set": {"state": "waiting_for_src_caption", "src_remove": remove_list}})
-        await message.reply("📝 **Replace Mode**\n`Old:New` format (`/d` for none)")
-
-    elif state == "waiting_for_src_caption":
-        replace_dict = {}
-        if text != "/d":
-            for p in text.split("|"): 
-                old, new = p.split(":")
-                replace_dict[old.strip()] = new.strip()
-        await users_col.update_one({"_id": user_id}, {"$set": {"state": "waiting_for_src_watermark", "src_replace": replace_dict}})
-        wm_def = user.get("watermark", "No Watermark")
-        await message.reply(f"©️ **Watermark Name?**\n(`/d` for `{wm_def}`)")
-
-    elif state == "waiting_for_src_watermark":
-        wm_text = user.get("watermark", "") if text == "/d" else text
-        await users_col.update_one({"_id": user_id}, {"$set": {"state": "waiting_for_src_target", "temp_wm": wm_text}})
-        await message.reply("📢 **Target Link ya ID?** (`/d` for Here)")
-
-    elif state == "waiting_for_src_target":
-        await users_col.update_one({"_id": user_id}, {"$set": {"state": "idle"}})
+async def load_and_run_plugins():
+    try:
+        await start_client()
+    except Exception as e:
+        print(f"Error during client start: {e}")
         
-        # 🟢 FETCH USER FONT/COLOR SETTINGS FROM DATABASE
-        font_file = user.get("thumb_font", "default.ttf")
-        font_color = user.get("thumb_color", "white")
-        wm_text = user.get("temp_wm", "")
-        
-        await message.reply(f"🔄 **Processing Started...**\n*(Thumbnail Settings Applied: {AVAILABLE_COLORS.get(font_color, font_color).upper()} color with {AVAILABLE_FONTS.get(font_file, font_file)} font)*")
-        
-        # Yahan jab upload/download process chale, aap thumbnail function ko naye parameters ke sath call karenge:
-        # thumb_path = await generate_thumbnail(file_path, wm_text, font_file, font_color)
-        
-        await message.reply("✅ Process execution logic connect kijiye jaise batch.py me tha!")
+    plugin_dir = "plugins"
+    plugins = [f[:-3] for f in os.listdir(plugin_dir) if f.endswith(".py") and f != "__init__.py"]
+
+    for plugin in plugins:
+        module = importlib.import_module(f"plugins.{plugin}")
+        if hasattr(module, f"run_{plugin}_plugin"):
+            print(f"Running {plugin} plugin...")
+            await getattr(module, f"run_{plugin}_plugin")()  
+
+async def main():
+    await load_and_run_plugins()
+    await setup_bot_commands()  
+    asyncio.create_task(human_behavior_routine())
+    while True:
+        await asyncio.sleep(1)  
 
 if __name__ == "__main__":
-    Thread(target=run_web, daemon=True).start()
-    print("🤖 Enterprise Bot Running with 100+ Colors UI...", flush=True)
-    app.run()
+    loop = asyncio.get_event_loop()
+    print("Starting clients ...")
+    try:
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        print("Shutting down...")
+    except Exception as e:
+        print(f"⚠️ CRITICAL ERROR: {e}")
+        print("⏳ Bot is facing a FloodWait or Server Ban. Sleeping for 15 Minutes to clear limits...")
+        time.sleep(900)  
+        print("🔄 Restarting now...")
+        sys.exit(1)
+    finally:
+        try:
+            loop.close()
+        except Exception:
+            pass
