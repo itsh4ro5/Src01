@@ -10,6 +10,7 @@ from pyrogram.errors import UserNotParticipant, FloodWait
 from config import API_ID, API_HASH, LOG_GROUP, STRING, FORCE_SUB, FREEMIUM_LIMIT, PREMIUM_LIMIT
 from utils.func import get_user_data, screenshot, thumbnail, get_video_metadata, IS_PAUSED, save_user_data
 from utils.func import get_user_data_key, process_text_with_rules, is_premium_user, E
+from utils.func import generate_thumbnail, beautify_caption
 from shared_client import app as X
 from plugins.settings import rename_file
 from plugins.start import subscribe as sub
@@ -17,14 +18,6 @@ from utils.custom_filters import login_in_progress
 from utils.encrypt import dcs
 from typing import Dict, Any, Optional
 
-# 🟢 Pillow Library import for custom thumbnail watermark
-try:
-    from PIL import Image, ImageDraw, ImageFont
-except ImportError:
-    print("⚠️ Pillow not installed! Run 'pip install Pillow'")
-    Image, ImageDraw, ImageFont = None, None, None
-
-# 🟢 LOGGING SETUP
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 logging.getLogger("pyrogram.session.session").setLevel(logging.ERROR)
@@ -34,9 +27,6 @@ Z, P, UB, UC = {}, {}, {}, {}
 
 ACTIVE_USERS = {}
 ACTIVE_USERS_FILE = "active_users.json"
-
-def sanitize(filename):
-    return re.sub(r'[<>:"/\\|?*\']', '_', filename).strip(" .")[:255]
 
 def load_active_users():
     try:
@@ -83,9 +73,6 @@ async def remove_active_batch(user_id: int):
         del ACTIVE_USERS[str(user_id)]
         await save_active_users_to_file()
 
-def get_batch_info(user_id: int) -> Optional[Dict[str, Any]]:
-    return ACTIVE_USERS.get(str(user_id))
-
 ACTIVE_USERS = load_active_users()
 
 async def upd_dlg(c):
@@ -95,7 +82,6 @@ async def upd_dlg(c):
     except Exception:
         return False
 
-# 🟢 ROBUST FETCHING
 async def get_msg(c, u, i, d, lt):
     logger.info(f"Fetch Request -> Chat: {i} | MsgID: {d} | Type: {lt}")
     try:
@@ -119,7 +105,6 @@ async def get_msg(c, u, i, d, lt):
                 try:
                     msg = await u.get_messages(i, d)
                     if msg and not getattr(msg, "empty", False):
-                        logger.info("✅ Message fetched successfully by Userbot")
                         return msg
                 except FloodWait as fw:
                     await asyncio.sleep(fw.value + 2)
@@ -128,16 +113,13 @@ async def get_msg(c, u, i, d, lt):
                         return msg
                 except Exception:
                     pass
-                
                 try:
                     await u.join_chat(i)
                     msg = await u.get_messages(i, d)
                     if msg and not getattr(msg, "empty", False):
-                        logger.info("✅ Message fetched after joining by Userbot")
                         return msg
                 except Exception:
                     pass
-            
             logger.warning(f"❌ Could not fetch Public Message {d} from {i}")
             return None
         else:
@@ -155,10 +137,8 @@ async def get_msg(c, u, i, d, lt):
                         try:
                             result = await u.get_messages(target_id, d)
                             if result and not getattr(result, "empty", False):
-                                logger.info(f"✅ Message Found in private chat {target_id}!")
                                 return result
                         except FloodWait as fw:
-                            logger.warning(f"⚠️ FloodWait Active! Sleeping {fw.value}s")
                             await asyncio.sleep(fw.value + 2)
                             result = await u.get_messages(target_id, d)
                             if result and not getattr(result, "empty", False):
@@ -202,16 +182,12 @@ async def get_uclient(uid):
     ud = await get_user_data(uid)
     ubot = UB.get(uid)
     cl = UC.get(uid)
-    
     if cl:
         if not cl.is_connected:
             try: await cl.connect()
             except: pass
         return cl
-        
-    if not ud: 
-        return ubot if ubot else None
-        
+    if not ud: return ubot if ubot else None
     xxx = ud.get('session_string')
     if xxx:
         try:
@@ -221,7 +197,6 @@ async def get_uclient(uid):
             UC[uid] = gg
             return gg
         except Exception as e:
-            logger.error(f'User client error: {e}')
             return ubot if ubot else Y
     return Y
 
@@ -242,92 +217,16 @@ async def prog(c, t, C, h, m, st):
         except: pass
         if p >= 100: P.pop(m, None)
 
-# 🟢 CAPTION BEAUTIFIER & CUSTOM THUMBNAIL LOGIC
-def beautify_caption(text):
-    if not text: return ""
-    replacements = {
-        r"(?i)Index\s*:": "\n🔢 **Index:**",
-        r"(?i)Title\s*:": "\n🎬 **Title:**",
-        r"(?i)Topic\s*:": "\n📁 **Topic:**",
-        r"(?i)Batch\s*:": "\n🏷️ **Batch:**",
-        r"(?i)Extracted By\s*:": "\n👤 **Extracted By:**",
-        r"(?i)Quality\s*:": "\n🖥️ **Quality:**",
-        r"(?i)Size\s*:": "\n📦 **Size:**"
-    }
-    for pattern, new_text in replacements.items(): 
-        text = re.sub(pattern, new_text, text)
-    text = re.sub(r'\n\s*\n', '\n', text).strip()
-    if text: 
-        return f"━━━━━━━━━━━━━━━━━━━\n{text}\n━━━━━━━━━━━━━━━━━━━"
-    return ""
-
-async def add_thumbnail_watermark(video_path, uid):
-    if not video_path or not Image: return None
-    try:
-        thumb_path = f"{video_path}_thumb.jpg"
-        cmd = ["ffmpeg", "-i", video_path, "-ss", "00:00:01", "-vframes", "1", "-y", thumb_path, "-loglevel", "quiet"]
-        proc = await asyncio.create_subprocess_exec(*cmd)
-        await proc.wait()
-        
-        if os.path.exists(thumb_path):
-            img = Image.open(thumb_path)
-            draw = ImageDraw.Draw(img)
-            
-            font_file = await get_user_data_key(uid, "thumb_font", "default.ttf")
-            font_color = await get_user_data_key(uid, "thumb_color", "white")
-            wm_text = await get_user_data_key(uid, "watermark", "")
-            
-            if not wm_text or wm_text.lower() == "skip":
-                return thumb_path
-
-            try:
-                FONT_DIR = "fonts"
-                font_size = int(img.width / 12)
-                actual_font_path = os.path.join(FONT_DIR, font_file)
-                font = ImageFont.truetype(actual_font_path, font_size)
-            except Exception:
-                font = ImageFont.load_default()
-            
-            text_bbox = draw.textbbox((0, 0), wm_text, font=font)
-            text_width = text_bbox[2] - text_bbox[0]
-            text_height = text_bbox[3] - text_bbox[1]
-            x = (img.width - text_width) / 2
-            y = (img.height - text_height) / 2
-            
-            box_padding = int(img.width/50)
-            draw.rectangle([x - box_padding, y - box_padding, x + text_width + box_padding, y + text_height + box_padding], fill=(0, 0, 0, 150))
-            
-            shadow_color = "black" if font_color != "black" else "white"
-            for dx in [-2, 0, 2]:
-                for dy in [-2, 0, 2]:
-                    draw.text((x+dx, y+dy), wm_text, font=font, fill=shadow_color)
-                    
-            draw.text((x, y), wm_text, font=font, fill=font_color)
-            img.convert('RGB').save(thumb_path, "JPEG", quality=95)
-            return thumb_path
-    except Exception as e:
-        logger.error(f"Thumbnail Watermark Error: {e}")
-    return None
-
 async def send_direct(c, m, tcid, ft=None, rtmid=None):
     try:
-        if m.video:
-            await c.send_video(tcid, m.video.file_id, caption=ft, duration=m.video.duration, width=m.video.width, height=m.video.height, reply_to_message_id=rtmid)
-        elif m.video_note:
-            await c.send_video_note(tcid, m.video_note.file_id, reply_to_message_id=rtmid)
-        elif m.voice:
-            await c.send_voice(tcid, m.voice.file_id, reply_to_message_id=rtmid)
-        elif m.sticker:
-            await c.send_sticker(tcid, m.sticker.file_id, reply_to_message_id=rtmid)
-        elif m.audio:
-            await c.send_audio(tcid, m.audio.file_id, caption=ft, duration=m.audio.duration, performer=m.audio.performer, title=m.audio.title, reply_to_message_id=rtmid)
-        elif m.photo:
-            photo_id = m.photo.file_id if hasattr(m.photo, 'file_id') else m.photo[-1].file_id
-            await c.send_photo(tcid, photo_id, caption=ft, reply_to_message_id=rtmid)
-        elif m.document:
-            await c.send_document(tcid, m.document.file_id, caption=ft, file_name=m.document.file_name, reply_to_message_id=rtmid)
-        else:
-            return False
+        if m.video: await c.send_video(tcid, m.video.file_id, caption=ft, duration=m.video.duration, width=m.video.width, height=m.video.height, reply_to_message_id=rtmid)
+        elif m.video_note: await c.send_video_note(tcid, m.video_note.file_id, reply_to_message_id=rtmid)
+        elif m.voice: await c.send_voice(tcid, m.voice.file_id, reply_to_message_id=rtmid)
+        elif m.sticker: await c.send_sticker(tcid, m.sticker.file_id, reply_to_message_id=rtmid)
+        elif m.audio: await c.send_audio(tcid, m.audio.file_id, caption=ft, duration=m.audio.duration, performer=m.audio.performer, title=m.audio.title, reply_to_message_id=rtmid)
+        elif m.photo: await c.send_photo(tcid, m.photo.file_id if hasattr(m.photo, 'file_id') else m.photo[-1].file_id, caption=ft, reply_to_message_id=rtmid)
+        elif m.document: await c.send_document(tcid, m.document.file_id, caption=ft, file_name=m.document.file_name, reply_to_message_id=rtmid)
+        else: return False
         return True
     except Exception as e:
         logger.error(f'Direct send error: {e}')
@@ -360,12 +259,14 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             user_cap = await get_user_data_key(d, 'caption', '')
             raw_caption = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
             
-            # 🟢 TASK-BASED CAPTION WORD REPLACEMENT (CASE-INSENSITIVE)
             if task:
                 for word in task.get("remove_list", []): 
                     raw_caption = re.sub(re.escape(word), "", raw_caption, flags=re.IGNORECASE)
                 for old, new in task.get("replace_dict", {}).items(): 
                     raw_caption = re.sub(re.escape(old), new, raw_caption, flags=re.IGNORECASE)
+            
+            # 🟢 EXTENSION REMOVAL (.mp4, .pdf) FROM CAPTION 🟢
+            raw_caption = re.sub(r'\.(mp4|mkv|pdf|avi|webm|jpg|png)', '', raw_caption, flags=re.IGNORECASE)
             
             ft = beautify_caption(raw_caption)
             
@@ -425,8 +326,10 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             fsize = os.path.getsize(f) / (1024 * 1024 * 1024)
             th = None
             
+            batch_wm = task.get("watermark", "") if task else ""
+            
             if m.video or str(f).endswith(('.mp4', '.mkv')):
-                 th = await add_thumbnail_watermark(f, uid)
+                 th = await generate_thumbnail(f, batch_wm, uid)
             if not th:
                  th = thumbnail(d)
             
@@ -504,7 +407,9 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 for old, new in task.get("replace_dict", {}).items(): 
                     raw_caption = re.sub(re.escape(old), new, raw_caption, flags=re.IGNORECASE)
             
+            raw_caption = re.sub(r'\.(mp4|mkv|pdf|avi|webm|jpg|png)', '', raw_caption, flags=re.IGNORECASE)
             ft = beautify_caption(raw_caption)
+            
             await c.send_message(tcid, text=ft if ft else orig_text, reply_to_message_id=rtmid)
             return 'Sent.'
         else:
@@ -518,7 +423,6 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
 async def process_cmd(c, m):
     uid = m.from_user.id
     cmd = m.command[0]
-    logger.info(f"Command /{cmd} initiated by {uid}")
     
     if FREEMIUM_LIMIT == 0 and not await is_premium_user(uid):
         await m.reply_text("This bot does not provide free servies, get subscription from OWNER")
