@@ -23,6 +23,17 @@ async def subscribe(app, message):
         except Exception as ggn:
             await message.reply_text(f"Something Went Wrong. Contact admins... with following message {ggn}")
             return 1 
+
+# 🟢 THE /ID COMMAND
+@app.on_message(filters.command("id"))
+async def get_id_cmd(client, message):
+    text = f"🆔 **Current Chat ID:** `{message.chat.id}`\n"
+    if message.reply_to_message:
+        if message.reply_to_message.forward_from_chat: 
+            text += f"📢 **Forwarded Chat ID:** `{message.reply_to_message.forward_from_chat.id}`\n"
+        elif message.reply_to_message.forward_from: 
+            text += f"👤 **Forwarded User ID:** `{message.reply_to_message.forward_from.id}`\n"
+    await message.reply(text)
      
 @app.on_message(filters.command("set"))
 async def set(_, message):
@@ -43,7 +54,8 @@ async def set(_, message):
         BotCommand("add", "➕ Add user to premium"),
         BotCommand("rem", "➖ Remove from premium"),
         BotCommand("rembot", "🤨 Remove your custom bot"),
-        BotCommand("settings", "⚙️ Personalize things"),
+        BotCommand("settings", "🎨 Personalize Thumbnail & Texts"),
+        BotCommand("id", "🆔 Get Chat/User ID"),
         BotCommand("plan", "🗓️ Check our premium plans"),
         BotCommand("terms", "🥺 Terms and conditions"),
         BotCommand("help", "❓ If you're a noob, still!"),
@@ -52,8 +64,6 @@ async def set(_, message):
     ])
  
     await message.reply("✅ Commands configured successfully!")
- 
- 
  
  
 help_pages = [
@@ -231,5 +241,3 @@ async def see_terms(client, callback_query):
         ]
     )
     await callback_query.message.edit_text(terms_text, reply_markup=buttons)
- 
- 
