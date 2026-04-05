@@ -8,7 +8,7 @@ import os
 import asyncio
 import string
 import random
-import aiohttp  # 🟢 Added to download image from link
+import requests  # 🟢 FIX: Changed from aiohttp to requests to prevent ImportError crash
 from shared_client import client as gf
 from config import OWNER_ID
 from utils.func import get_user_data_key, save_user_data, users_collection
@@ -65,7 +65,7 @@ async def send_settings_message(chat_id, user_id):
     ]
     await gf.send_message(chat_id, MESS, buttons=buttons)
 
-# 🟢 HELPER FUNCTION TO RENDER THUMBNAIL SETTINGS WITHOUT ERROR 🟢
+# 🟢 HELPER FUNCTION: To prevent AttributeError on 'event.data'
 async def render_thumb_settings(event, user_id):
     current_font = await get_user_data_key(user_id, "thumb_font", "default.ttf")
     current_color = await get_user_data_key(user_id, "thumb_color", "white")
@@ -115,7 +115,7 @@ __👉 **Note:** if you are using custom bot then your bot should be admin that 
         },
         b'setthumb': {
             'type': 'setthumb',
-            # 🟢 UPDATED PROMPT FOR IMAGE, URL & TEXT 🟢
+            # 🟢 UPDATED PROMPT FOR IMAGE, URL & TEXT
             'message': 'Please send the **Photo**, an **Image Link (URL)**, or type the **Text** you want to set as the thumbnail watermark.'
         }
     }
@@ -225,14 +225,14 @@ __👉 **Note:** if you are using custom bot then your bot should be admin that 
         new_font = data_str.split("set_font_")[1]
         await save_user_data(user_id, "thumb_font", new_font)
         await event.answer(f"Font changed!", alert=True)
-        # 🟢 NO MORE ATTRIBUTE ERROR, CALLING HELPER INSTEAD 🟢
+        # 🟢 CALLING HELPER INSTEAD OF OVERWRITING event.data
         await render_thumb_settings(event, user_id)
         
     elif data_str.startswith('set_color_'):
         new_color = data_str.split("set_color_")[1]
         await save_user_data(user_id, "thumb_color", new_color)
         await event.answer(f"Color changed!", alert=True)
-        # 🟢 NO MORE ATTRIBUTE ERROR, CALLING HELPER INSTEAD 🟢
+        # 🟢 CALLING HELPER INSTEAD OF OVERWRITING event.data
         await render_thumb_settings(event, user_id)
 
 async def start_conversation(event, user_id, conv_type, prompt_message):
@@ -252,7 +252,8 @@ async def cancel_conversation(event):
 @gf.on(events.NewMessage())
 async def handle_conversation_input(event):
     user_id = event.sender_id
-    if user_id not in active_conversations or event.message.text and event.message.text.startswith('/'):
+    # 🟢 FIX: Safe check for event.text to prevent NoneType crash
+    if user_id not in active_conversations or (event.text and event.text.startswith('/')):
         return
         
     conv_type = active_conversations[user_id]['type']
@@ -275,24 +276,24 @@ async def handle_conversation_input(event):
 
 async def handle_setchat(event, user_id):
     try:
-        chat_id = event.message.text.strip()
+        chat_id = event.text.strip()
         await save_user_data(user_id, 'chat_id', chat_id)
         await event.respond('✅ Chat ID set successfully!')
     except Exception as e:
         await event.respond(f'❌ Error setting chat ID: {e}')
 
 async def handle_setrename(event, user_id):
-    rename_tag = event.message.text.strip()
+    rename_tag = event.text.strip()
     await save_user_data(user_id, 'rename_tag', rename_tag)
     await event.respond(f'✅ Rename tag set to: {rename_tag}')
 
 async def handle_setcaption(event, user_id):
-    caption = event.message.text
+    caption = event.text
     await save_user_data(user_id, 'caption', caption)
     await event.respond(f'✅ Caption set successfully!')
 
 async def handle_setreplacement(event, user_id):
-    match = re.match("'(.+)' '(.+)'", event.message.text)
+    match = re.match("'(.+)' '(.+)'", event.text)
     if not match:
         await event.respond("❌ Invalid format. Usage: 'WORD(s)' 'REPLACEWORD'")
     else:
@@ -307,18 +308,18 @@ async def handle_setreplacement(event, user_id):
             await event.respond(f"✅ Replacement saved: '{word}' will be replaced with '{replace_word}'")
 
 async def handle_addsession(event, user_id):
-    session_string = event.message.text.strip()
+    session_string = event.text.strip()
     await save_user_data(user_id, 'session_string', session_string)
     await event.respond('✅ Session string added successfully!')
 
 async def handle_deleteword(event, user_id):
-    words_to_delete = event.message.text.split()
+    words_to_delete = event.text.split()
     delete_words = await get_user_data_key(user_id, 'delete_words', [])
     delete_words = list(set(delete_words + words_to_delete))
     await save_user_data(user_id, 'delete_words', delete_words)
     await event.respond(f"✅ Words added to delete list: {', '.join(words_to_delete)}")
 
-# 🟢 UPDATED: HANDLE IMAGE, URL, OR TEXT WATERMARK 🟢
+# 🟢 FIXED: SAFELY HANDLE IMAGE, URL, OR TEXT WATERMARK 🟢
 async def handle_setthumb(event, user_id):
     if event.photo:
         temp_path = await event.download_media()
@@ -330,19 +331,25 @@ async def handle_setthumb(event, user_id):
             await event.respond('✅ Thumbnail photo saved successfully!')
         except Exception as e:
             await event.respond(f'❌ Error saving thumbnail: {e}')
-    elif event.message.text:
-        text = event.message.text.strip()
+    elif event.text:
+        text = event.text.strip()
         if text.startswith('http://') or text.startswith('https://'):
             status_msg = await event.respond('⏳ Downloading image from link...')
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(text) as resp:
-                        if resp.status == 200:
-                            with open(f'{user_id}.jpg', 'wb') as f:
-                                f.write(await resp.read())
-                            await status_msg.edit('✅ Thumbnail image downloaded and saved successfully!')
-                        else:
-                            await status_msg.edit(f'❌ Failed to download image. HTTP Status: {resp.status}')
+                loop = asyncio.get_event_loop()
+                def download_img():
+                    response = requests.get(text, timeout=10)
+                    if response.status_code == 200:
+                        with open(f'{user_id}.jpg', 'wb') as f:
+                            f.write(response.content)
+                        return True
+                    return False
+                
+                success = await loop.run_in_executor(None, download_img)
+                if success:
+                    await status_msg.edit('✅ Thumbnail image downloaded and saved successfully!')
+                else:
+                    await status_msg.edit('❌ Failed to download image from the link.')
             except Exception as e:
                 await status_msg.edit(f'❌ Error downloading image: {e}')
         else:
