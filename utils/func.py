@@ -9,6 +9,18 @@ from datetime import datetime, timedelta
 from motor.motor_asyncio import AsyncIOMotorClient
 from config import MONGO_DB as MONGO_URI, DB_NAME
 
+# 🟢 Pillow Library for Advanced Thumbnail Font Watermarking
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    Image, ImageDraw, ImageFont = None, None, None
+    print("⚠️ Pillow not installed! Run 'pip install Pillow'")
+
+try:
+    from theme_config import FONT_DIR
+except ImportError:
+    FONT_DIR = "fonts"
+
 # GLOBAL VARIABLE FOR HUMAN SLEEP CYCLE
 IS_PAUSED = False
 
@@ -43,17 +55,89 @@ a11 = "aHR0cHM6Ly90Lm1lL2tpbmdvZnBhdGFs"
 
 # ------- < end > Session Encoder don't change --------
 
+# 🟢 CAPTION BEAUTIFIER
+def beautify_caption(text):
+    if not text: return ""
+    replacements = {
+        r"(?i)Index\s*:": "\n🔢 **Index:**",
+        r"(?i)Title\s*:": "\n🎬 **Title:**",
+        r"(?i)Topic\s*:": "\n📁 **Topic:**",
+        r"(?i)Batch\s*:": "\n🏷️ **Batch:**",
+        r"(?i)Extracted By\s*:": "\n👤 **Extracted By:**",
+        r"(?i)Quality\s*:": "\n🖥️ **Quality:**",
+        r"(?i)Size\s*:": "\n📦 **Size:**"
+    }
+    for pattern, new_text in replacements.items(): 
+        text = re.sub(pattern, new_text, text)
+    text = re.sub(r'\n{3,}', '\n\n', text).strip()
+    if text: 
+        return f"━━━━━━━━━━━━━━━━━━━\n{text}\n━━━━━━━━━━━━━━━━━━━"
+    return ""
+
+# 🟢 CUSTOM THUMBNAIL WATERMARKING (TEXT VIA PILLOW)
+async def generate_thumbnail(video_path, watermark, user_id):
+    if not video_path or not os.path.exists(video_path): 
+        return None
+    ext = video_path.lower().split('.')[-1]
+    if ext not in ['mp4', 'mkv', 'avi', 'mov', 'webm']: 
+        return None
+    thumb_path = f"{video_path}_thumb.jpg"
+    
+    cmd = ["ffmpeg", "-i", video_path, "-ss", "00:00:01", "-vframes", "1", "-y", thumb_path, "-loglevel", "quiet"]
+    try:
+        proc = await asyncio.create_subprocess_exec(*cmd)
+        await proc.wait()
+    except Exception as e:
+        print(f"Thumb extraction error: {e}")
+        return None
+
+    if not os.path.exists(thumb_path):
+        return None
+
+    if watermark and watermark.lower() != "skip" and Image:
+        font_file = await get_user_data_key(user_id, "thumb_font", "default.ttf")
+        font_color = await get_user_data_key(user_id, "thumb_color", "white")
+        
+        try:
+            def apply_pil_watermark():
+                img = Image.open(thumb_path).convert("RGBA")
+                draw = ImageDraw.Draw(img)
+                try:
+                    font_size = int(img.width / 12)
+                    actual_font_path = os.path.join(FONT_DIR, font_file)
+                    font = ImageFont.truetype(actual_font_path, font_size)
+                except IOError:
+                    font = ImageFont.load_default()
+                
+                bbox = draw.textbbox((0, 0), watermark, font=font)
+                w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                x, y = (img.width - w) / 2, (img.height - h) / 2
+                
+                pad = int(img.width/50)
+                draw.rectangle([x-pad, y-pad, x+w+pad, y+h+pad], fill=(0,0,0,150))
+                
+                shadow_color = "black" if font_color != "black" else "white"
+                for dx in [-2, 0, 2]:
+                    for dy in [-2, 0, 2]:
+                        draw.text((x+dx, y+dy), watermark, font=font, fill=shadow_color)
+                        
+                draw.text((x, y), watermark, font=font, fill=font_color)
+                img.convert('RGB').save(thumb_path, "JPEG", quality=95)
+
+            await asyncio.to_thread(apply_pil_watermark)
+        except Exception as e:
+            print(f"Pillow Watermarking Error: {e}")
+            
+    return thumb_path
+
 def is_private_link(link):
     return bool(PRIVATE_LINK_PATTERN.match(link))
-
 
 def thumbnail(sender):
     return f'{sender}.jpg' if os.path.exists(f'{sender}.jpg') else None
 
-
 def hhmmss(seconds):
     return time.strftime('%H:%M:%S', time.gmtime(seconds))
-
 
 def E(L):   
     private_match = re.match(r'https://t\.me/c/(\d+)/(?:\d+/)?(\d+)', L)
@@ -65,7 +149,6 @@ def E(L):
         return public_match.group(1), int(public_match.group(2)), 'public'
     
     return None, None, None
-
 
 def get_display_name(user):
     if user.first_name and user.last_name:
@@ -79,10 +162,8 @@ def get_display_name(user):
     else:
         return "Unknown User"
 
-
 def sanitize_filename(filename):
     return re.sub(r'[<>:"/\\|?*]', '_', filename)
-
 
 def get_dummy_filename(info):
     file_type = info.get("type", "file")
@@ -95,10 +176,8 @@ def get_dummy_filename(info):
     
     return f"downloaded_file_{int(time.time())}.{extension}"
 
-
 async def is_private_chat(event):
     return event.is_private
-
 
 async def save_user_data(user_id, key, value):
     await users_collection.update_one(
@@ -106,23 +185,17 @@ async def save_user_data(user_id, key, value):
         {"$set": {key: value}},
         upsert=True
     )
-   # print(users_collection)
-
 
 async def get_user_data_key(user_id, key, default=None):
     user_data = await users_collection.find_one({"user_id": int(user_id)})
-  #  print(f"Fetching key '{key}' for user {user_id}: {user_data}")
     return user_data.get(key, default) if user_data else default
-
 
 async def get_user_data(user_id):
     try:
         user_data = await users_collection.find_one({"user_id": user_id})
         return user_data
     except Exception as e:
-   #     logger.error(f"Error retrieving user data for {user_id}: {e}")
         return None
-
 
 async def save_user_session(user_id, session_string):
     try:
@@ -140,7 +213,6 @@ async def save_user_session(user_id, session_string):
         logger.error(f"Error saving session for user {user_id}: {e}")
         return False
 
-
 async def remove_user_session(user_id):
     try:
         await users_collection.update_one(
@@ -152,7 +224,6 @@ async def remove_user_session(user_id):
     except Exception as e:
         logger.error(f"Error removing session for user {user_id}: {e}")
         return False
-
 
 async def save_user_bot(user_id, bot_token):
     try:
@@ -170,7 +241,6 @@ async def save_user_bot(user_id, bot_token):
         logger.error(f"Error saving bot token for user {user_id}: {e}")
         return False
 
-
 async def remove_user_bot(user_id):
     try:
         await users_collection.update_one(
@@ -183,7 +253,7 @@ async def remove_user_bot(user_id):
         logger.error(f"Error removing bot token for user {user_id}: {e}")
         return False
 
-
+# 🟢 IGNORECASE FIX FOR GLOBAL TEXT RULES
 async def process_text_with_rules(user_id, text):
     if not text:
         return ""
@@ -194,18 +264,18 @@ async def process_text_with_rules(user_id, text):
         
         processed_text = text
         for word, replacement in replacements.items():
-            processed_text = processed_text.replace(word, replacement)
+            processed_text = re.sub(re.escape(word), replacement, processed_text, flags=re.IGNORECASE)
         
         if delete_words:
-            words = processed_text.split()
-            filtered_words = [w for w in words if w not in delete_words]
-            processed_text = " ".join(filtered_words)
+            for word in delete_words:
+                processed_text = re.sub(re.escape(word), "", processed_text, flags=re.IGNORECASE)
+            
+            processed_text = " ".join(processed_text.split())
         
         return processed_text
     except Exception as e:
         logger.error(f"Error processing text with rules: {e}")
         return text
-
 
 async def screenshot(video: str, duration: int, sender: str) -> str | None:
     existing_screenshot = f"{sender}.jpg"
@@ -237,7 +307,6 @@ async def screenshot(video: str, duration: int, sender: str) -> str | None:
     else:
         print(f"FFmpeg Error: {stderr.decode().strip()}")
         return None
-
 
 async def get_video_metadata(file_path):
     default_values = {'width': 1, 'height': 1, 'duration': 1}
@@ -274,7 +343,6 @@ async def get_video_metadata(file_path):
     except Exception as e:
         logger.error(f"Error in get_video_metadata: {e}")
         return default_values
-
 
 async def add_premium_user(user_id, duration_value, duration_unit):
     try:
@@ -316,7 +384,6 @@ async def add_premium_user(user_id, duration_value, duration_unit):
         logger.error(f"Error adding premium user {user_id}: {e}")
         return False, str(e)
 
-
 async def is_premium_user(user_id):
     try:
         user = await premium_users_collection.find_one({"user_id": user_id})
@@ -327,7 +394,6 @@ async def is_premium_user(user_id):
     except Exception as e:
         logger.error(f"Error checking premium status for {user_id}: {e}")
         return False
-
 
 async def get_premium_details(user_id):
     try:
