@@ -12,6 +12,13 @@ from shared_client import client as gf
 from config import OWNER_ID
 from utils.func import get_user_data_key, save_user_data, users_collection
 
+try:
+    from theme_config import AVAILABLE_FONTS, AVAILABLE_COLORS, FONT_DIR
+except ImportError:
+    AVAILABLE_FONTS = {"default.ttf": "Standard"}
+    AVAILABLE_COLORS = {"white": "⚪ White"}
+    FONT_DIR = "fonts"
+
 VIDEO_EXTENSIONS = {
     'mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm',
     'mpeg', 'mpg', '3gp'
@@ -45,6 +52,9 @@ async def send_settings_message(chat_id, user_id):
             Button.inline('🚪 Logout', b'logout')
         ],
         [
+            Button.inline('🎨 Thumbnail Fonts & Colors', b'thumb_settings')
+        ],
+        [
             Button.inline('🖼️ Set Thumbnail', b'setthumb'),
             Button.inline('❌ Remove Thumbnail', b'remthumb')
         ],
@@ -57,6 +67,8 @@ async def send_settings_message(chat_id, user_id):
 @gf.on(events.CallbackQuery)
 async def callback_query_handler(event):
     user_id = event.sender_id
+    data_bytes = event.data
+    data_str = data_bytes.decode('utf-8') if isinstance(data_bytes, bytes) else data_bytes
     
     callback_actions = {
         b'setchat': {
@@ -94,6 +106,7 @@ __👉 **Note:** if you are using custom bot then your bot should be admin that 
     if event.data in callback_actions:
         action = callback_actions[event.data]
         await start_conversation(event, user_id, action['type'], action['message'])
+        
     elif event.data == b'logout':
         result = await users_collection.update_one(
             {'user_id': user_id},
@@ -103,6 +116,7 @@ __👉 **Note:** if you are using custom bot then your bot should be admin that 
             await event.respond('Logged out and deleted session successfully.')
         else:
             await event.respond('You are not logged in.')
+            
     elif event.data == b'reset':
         try:
             await users_collection.update_one(
@@ -112,7 +126,9 @@ __👉 **Note:** if you are using custom bot then your bot should be admin that 
                     'replacement_words': '',
                     'rename_tag': '',
                     'caption': '',
-                    'chat_id': ''
+                    'chat_id': '',
+                    'thumb_font': '',
+                    'thumb_color': ''
                 }}
             )
             thumbnail_path = f'{user_id}.jpg'
@@ -121,12 +137,97 @@ __👉 **Note:** if you are using custom bot then your bot should be admin that 
             await event.respond('✅ All settings reset successfully. To logout, click /logout')
         except Exception as e:
             await event.respond(f'Error resetting settings: {e}')
+            
     elif event.data == b'remthumb':
         try:
             os.remove(f'{user_id}.jpg')
             await event.respond('Thumbnail removed successfully!')
         except FileNotFoundError:
             await event.respond('No thumbnail found to remove.')
+            
+    # 🟢 THUMBNAIL CUSTOMIZATION LOGIC 🟢
+    elif data_str == 'thumb_settings':
+        current_font = await get_user_data_key(user_id, "thumb_font", "default.ttf")
+        current_color = await get_user_data_key(user_id, "thumb_color", "white")
+        font_name = AVAILABLE_FONTS.get(current_font, "Standard Font")
+        color_name = AVAILABLE_COLORS.get(current_color, "⚪ White")
+        
+        buttons = [
+            [Button.inline('🔠 Change Font Style', b'menu_fonts_0')],
+            [Button.inline('🖌 Change Font Color', b'menu_colors_0')],
+            [Button.inline('🔙 Back to Settings', b'back_to_main')]
+        ]
+        await event.edit(f'🎨 **Thumbnail Customization**\n\n• Current Font: {font_name}\n• Current Color: {color_name}\n\nKya change karna chahte hain?', buttons=buttons)
+        
+    elif data_str == 'back_to_main':
+        await event.delete()
+        await send_settings_message(event.chat_id, user_id)
+        
+    elif data_str.startswith('menu_fonts_'):
+        page = int(data_str.split("_")[2])
+        font_keys = list(AVAILABLE_FONTS.keys())
+        per_page = 10
+        start = page * per_page
+        end = start + per_page
+        current_fonts = font_keys[start:end]
+        
+        buttons = []
+        for f_file in current_fonts:
+            buttons.append([Button.inline(AVAILABLE_FONTS[f_file], f"set_font_{f_file}".encode('utf-8'))])
+            
+        nav_row = []
+        if page > 0:
+            nav_row.append(Button.inline("⬅️ Prev", f"menu_fonts_{page-1}".encode('utf-8')))
+        if end < len(font_keys):
+            nav_row.append(Button.inline("Next ➡️", f"menu_fonts_{page+1}".encode('utf-8')))
+        
+        if nav_row: buttons.append(nav_row)
+        buttons.append([Button.inline("🔙 Back", b"thumb_settings")])
+        
+        await event.edit(f"🔠 **Select Font Style (Page {page+1}):**\n*(Upload files in {FONT_DIR}/ folder)*", buttons=buttons)
+        
+    elif data_str.startswith('menu_colors_'):
+        page = int(data_str.split("_")[2])
+        color_keys = list(AVAILABLE_COLORS.keys())
+        per_page = 20
+        start = page * per_page
+        end = start + per_page
+        current_colors = color_keys[start:end]
+        
+        buttons = []
+        row = []
+        for c_code in current_colors:
+            row.append(Button.inline(AVAILABLE_COLORS[c_code], f"set_color_{c_code}".encode('utf-8')))
+            if len(row) == 2:
+                buttons.append(row)
+                row = []
+        if row: buttons.append(row)
+        
+        nav_row = []
+        if page > 0:
+            nav_row.append(Button.inline("⬅️ Prev", f"menu_colors_{page-1}".encode('utf-8')))
+        if end < len(color_keys):
+            nav_row.append(Button.inline("Next ➡️", f"menu_colors_{page+1}".encode('utf-8')))
+            
+        if nav_row: buttons.append(nav_row)
+        buttons.append([Button.inline("🔙 Back", b"thumb_settings")])
+        
+        await event.edit(f"🖌 **Select Font Color (Page {page+1}):**", buttons=buttons)
+        
+    elif data_str.startswith('set_font_'):
+        new_font = data_str.split("set_font_")[1]
+        await save_user_data(user_id, "thumb_font", new_font)
+        await event.answer(f"Font changed!", alert=True)
+        event.data = b"thumb_settings"
+        await callback_query_handler(event)
+        
+    elif data_str.startswith('set_color_'):
+        new_color = data_str.split("set_color_")[1]
+        await save_user_data(user_id, "thumb_color", new_color)
+        await event.answer(f"Color changed!", alert=True)
+        event.data = b"thumb_settings"
+        await callback_query_handler(event)
+
 
 async def start_conversation(event, user_id, conv_type, prompt_message):
     if user_id in active_conversations:
@@ -229,7 +330,7 @@ def generate_random_name(length=7):
     characters = string.ascii_letters + string.digits
     return ''.join(random.choice(characters) for _ in range(length))
 
-
+# 🟢 IGNORECASE FIX FOR FILE RENAMING
 async def rename_file(file, sender, edit):
     try:
         delete_words = await get_user_data_key(sender, 'delete_words', [])
@@ -253,17 +354,18 @@ async def rename_file(file, sender, edit):
             original_file_name = str(file)
             file_extension = 'mp4'
         
+        # 🟢 re.IGNORECASE FIX HERE 🟢
         for word in delete_words:
-            original_file_name = original_file_name.replace(word, '')
+            original_file_name = re.sub(re.escape(word), '', original_file_name, flags=re.IGNORECASE)
         
         for word, replace_word in replacements.items():
-            original_file_name = original_file_name.replace(word, replace_word)
+            original_file_name = re.sub(re.escape(word), replace_word, original_file_name, flags=re.IGNORECASE)
         
         new_file_name = f'{original_file_name} {custom_rename_tag}.{file_extension}'
+        new_file_name = re.sub(r'\s+', ' ', new_file_name).strip()
         
         os.rename(file, new_file_name)
         return new_file_name
     except Exception as e:
         print(f"Rename error: {e}")
         return file
-        
