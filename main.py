@@ -1,6 +1,3 @@
-# Copyright (c) 2025 devgagan : https://github.com/devgaganin.  
-# Licensed under the GNU General Public License v3.0.  
-
 import os
 import sys
 import random
@@ -10,14 +7,7 @@ import importlib
 from pyrogram.types import BotCommand  
 
 # 🟢 SPEED BOOST: Activate Ultra-Fast Async Engine
-try:
-    import uvloop
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    print("⚡ uvloop activated! Async operations will run at max speed.")
-except ImportError:
-    print("⚠️ uvloop not installed. Standard asyncio will be used. (pip install uvloop)")
+
 
 from shared_client import start_client, app
 import utils.func as global_state
