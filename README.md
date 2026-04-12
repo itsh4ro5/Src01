@@ -13,7 +13,7 @@ app_port: 7860
 
 The Save Restricted Content Bot is a stable Telegram bot developed by devgagan and TEAM SPY. It enables users to retrieve restricted messages from Telegram channels and groups, offering features such as custom thumbnail support and the ability to upload files up to 4GB. Additionally, the bot supports downloading videos from platforms like YouTube, Instagram, and Facebook, along with over 100 other sites
 
-[Telegram](https://t.me/save_restricted_content_bots) | [See Recent Updates](https://github.com/devgaganin/Save-Restricted-Content-Bot-V2/tree/v3#updates)
+[Telegram](https://t.me/Alpha01_robot) | [See Recent Updates](https://github.com/itsh4ro5/src.git)
 
 ### Star the repo it motivate us to update new features
 Please do start and max fork thanks 
@@ -125,11 +125,11 @@ To run the bot, you'll need to configure a few sensitive variables. Here's how t
 
 - To run the bot in the background:
   ```bash
-  screen -S gagan
+  screen -S 🇮‌🇹‌'🇸‌ 🇭‌4️⃣🇷‌
   python3 main.py
   ```
   - Detach: `Ctrl + A`, then `Ctrl + D`
-  - To stop: `screen -r gagan` and `screen -S gagan -X quit`
+  - To stop: `screen -r 🇮‌🇹‌'🇸‌ 🇭‌4️⃣🇷‌` and `screen -S 🇮‌🇹‌'🇸‌ 🇭‌4️⃣🇷‌ -X quit`
 
 </details>
 
@@ -201,13 +201,13 @@ Your credentials can be stolen if pushed to a public repository. Always keep the
 
 ## 🛠️ Terms of Use
 
-Visit the [Terms of Use](https://github.com/devgaganin/Save-Restricted-Content-Bot-Repo/blob/master/TERMS_OF_USE.md) page to review and accept the guidelines.
+Visit the [Terms of Use](https://github.com/itsh4ro5/src/blob/main/README.md) page to review and accept the guidelines.
 ## Important Note
 
 **Note**: Changing the terms and commands doesn't magically make you a developer. Real development involves understanding the code, writing new functionalities, and debugging issues, not just renaming things. If only it were that easy!
 
 
 <h3 align="center">
-  Developed with ❤️ by <a href="https://t.me/team_spy_pro"> Gagan </a>
+  Developed with ❤️ by <a href="https://t.me/H4R_Contact_bot"> 🇮‌🇹‌'🇸‌ 🇭‌4️⃣🇷‌ </a>
 </h3>
 
