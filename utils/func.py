@@ -37,6 +37,8 @@ users_collection = db["users"]
 premium_users_collection = db["premium_users"]
 statistics_collection = db["statistics"]
 codedb = db["redeem_code"]
+admin_auth_collection = db["admin_auth"]
+admin_logs_collection = db["admin_logs"]
 
 # ------- < start > Session Encoder don't change -------
 
@@ -403,3 +405,16 @@ async def get_premium_details(user_id):
     except Exception as e:
         logger.error(f"Error getting premium details for {user_id}: {e}")
         return None
+
+async def log_admin_activity(admin_id, admin_name, action, target="N/A"):
+    """Admin ki har activity ko database me save karega"""
+    try:
+        await admin_logs_collection.insert_one({
+            "admin_id": admin_id,
+            "admin_name": admin_name,
+            "action": action,
+            "target": target,
+            "timestamp": datetime.now()
+        })
+    except Exception as e:
+        logger.error(f"Activity log error: {e}")
