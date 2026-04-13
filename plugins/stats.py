@@ -26,18 +26,17 @@ async def status_handler(event):
             session_active = True
     
     # Check if user has a custom bot
-    if user_data and "bot_token" in user_data:
-        bot_active = True
-    
-    # Add premium status check
-    premium_status = "❌ Not a premium member"
-    premium_details = await get_premium_details(user_id)
-    if premium_details:
-        # Convert to IST timezone
-        expiry_utc = premium_details["subscription_end"]
-        expiry_ist = expiry_utc + timedelta(hours=5, minutes=30)
-        formatted_expiry = expiry_ist.strftime("%d-%b-%Y %I:%M:%S %p")
-        premium_status = f"✅ Premium until {formatted_expiry} (IST)"
+    if user_id in OWNER_ID:
+        premium_status = "👑 You are the boss of the bot"
+    else:
+        premium_status = "❌ Not a premium member"
+        premium_details = await get_premium_details(user_id)
+        if premium_details:
+            # Convert to IST timezone
+            expiry_utc = premium_details["subscription_end"]
+            expiry_ist = expiry_utc + timedelta(hours=5, minutes=30)
+            formatted_expiry = expiry_ist.strftime("%d-%b-%Y %I:%M:%S %p")
+            premium_status = f"✅ Premium until {formatted_expiry} (IST)"
     
     await event.respond(
         "**Your current status:**\n\n"
