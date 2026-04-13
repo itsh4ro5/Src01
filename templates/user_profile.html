@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile</title>
+    <style>
+        body { margin: 0; padding: 20px; font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #09090b, #18181b, #27272a); color: white; min-height: 100vh; }
+        .container { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; padding: 30px; max-width: 1000px; margin: auto; box-shadow: 0 15px 35px rgba(0,0,0,0.5); }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
+        h2, h3 { margin: 0; font-weight: 400; letter-spacing: 1px;}
+        .stat-card { background: rgba(0, 0, 0, 0.3); border-radius: 15px; padding: 25px; margin: 20px 0; border: 1px solid rgba(168, 85, 247, 0.3); }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: rgba(0,0,0,0.2); border-radius: 10px; overflow: hidden; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        th { background: rgba(255,255,255,0.05); color: #a855f7; font-weight: 600; }
+        .btn-back { background: rgba(255, 255, 255, 0.1); color: white; padding: 8px 15px; text-decoration: none; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); transition: 0.3s;}
+        .btn-back:hover { background: rgba(255, 255, 255, 0.2); }
+        code { background: rgba(255,255,255,0.1); padding: 3px 8px; border-radius: 5px; color: #92FE9D; }
+        .progress-text { font-size: 1.2rem; font-weight: bold; color: #00C9FF; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>👤 User Profile: <span style="color: #00C9FF;">{{ user.user_id }}</span></h2>
+            <a href="/admin/users" class="btn-back">⬅️ Back to List</a>
+        </div>
+
+        <h3>📡 Live Monitor (Is User Ka Current Task)</h3>
+        <div class="stat-card">
+            {% if task %}
+                <p><strong>📤 Source (Kahan se nikal raha hai):</strong> <code>{{ task.source }}</code></p>
+                <p><strong>📥 Destination (Kahan bhej raha hai):</strong> <code>{{ task.destination }}</code></p>
+                <p><strong>📊 Progress:</strong> <span class="progress-text">{{ task.success }} / {{ task.total }} files done</span></p>
+            {% else %}
+                <p style="opacity: 0.6; font-size: 1.1rem;">🟢 User is currently Idle. No active task running.</p>
+            {% endif %}
+        </div>
+
+        <h3>📋 History Khata (Is User Ki Pichli Activity)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Time (IST)</th>
+                    <th>Action Performed</th>
+                    <th>Target Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.timestamp.strftime('%d-%m-%Y %H:%M') }}</td>
+                    <td>{{ log.action }}</td>
+                    <td><code>{{ log.target }}</code></td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3" style="text-align: center; opacity: 0.5; padding: 30px;">No activities found for this user yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
