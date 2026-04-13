@@ -2,7 +2,8 @@ from shared_client import client as bot_client, app
 from telethon import events
 from datetime import timedelta
 from config import OWNER_ID
-from utils.func import add_premium_user, is_private_chat
+# 👇 Added log_admin_activity and get_display_name here
+from utils.func import add_premium_user, is_private_chat, log_admin_activity, get_display_name
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardButton as IK, InlineKeyboardMarkup as IKM
 from config import OWNER_ID, JOIN_LINK as JL , ADMIN_CONTACT as AC
@@ -56,6 +57,18 @@ Subscription valid until: {formatted_expiry} (IST)"""
                 f"""✅ Your have been added as premium member
 **Validity upto**: {formatted_expiry} (IST)"""
                 )
+            
+            # 👇 --- ADMIN DASHBOARD TRACKER --- 👇
+            sender = await event.get_sender()
+            admin_name = get_display_name(sender)
+            await log_admin_activity(
+                admin_id=user_id,
+                admin_name=admin_name,
+                action=f"Added Premium ({duration_value} {duration_unit})",
+                target=str(target_user_id)
+            )
+            # 👆 ------------------------------- 👆
+
         else:
             await event.respond(f'❌ Failed to add premium user: {result}')
     except ValueError:
