@@ -1,4 +1,5 @@
 import os
+import json
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from pymongo import MongoClient
 from config import MONGO_DB, DB_NAME, OWNER_ID
@@ -16,6 +17,17 @@ try:
     premium_col = db["premium_users"]
 except Exception as e:
     print(f"Database connection error: {e}")
+
+# 🟢 NEW: Direct JSON Reader function to avoid Pyrogram asyncio threading errors
+def get_active_task(user_id):
+    try:
+        if os.path.exists("active_users.json"):
+            with open("active_users.json", "r") as f:
+                data = json.load(f)
+                return data.get(str(user_id))
+    except Exception as e:
+        print(f"Task read error: {e}")
+    return None
 
 @app.route("/", methods=["GET", "POST"])
 def login():
@@ -74,11 +86,7 @@ def dashboard():
                                is_owner=is_owner)
     else:
         # ADMIN VIEW
-        try:
-            from plugins.batch import ACTIVE_USERS
-            current_task = ACTIVE_USERS.get(str(admin_id))
-        except ImportError:
-            current_task = None
+        current_task = get_active_task(admin_id) # 🟢 Using new safe function
             
         logs = list(admin_logs.find({"admin_id": admin_id}).sort("timestamp", -1).limit(50))
         view_type = f"Personal Dashboard ({session['admin_name']})"
@@ -104,11 +112,7 @@ def user_details(user_id):
         return redirect(url_for("dashboard"))
 
     user_info = premium_col.find_one({"user_id": user_id})
-    try:
-        from plugins.batch import ACTIVE_USERS
-        active_task = ACTIVE_USERS.get(str(user_id))
-    except ImportError:
-        active_task = None
+    active_task = get_active_task(user_id) # 🟢 Using new safe function
         
     user_logs = list(admin_logs.find({"admin_id": user_id}).sort("timestamp", -1).limit(20))
     return render_template("user_profile.html", user=user_info, task=active_task, logs=user_logs)
