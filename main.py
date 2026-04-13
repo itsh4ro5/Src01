@@ -4,9 +4,17 @@ import random
 import time
 import asyncio
 import importlib
+import threading
 from pyrogram.types import BotCommand  
 
-# 🟢 SPEED BOOST: Activate Ultra-Fast Async Engine
+# 🟢 Flask Dashboard import
+try:
+    from app import app as flask_app
+except ImportError:
+    print("⚠️ app.py not found. Dashboard will not start.")
+    flask_app = None
+
+# ⚠️ WARNING: If bot freezes randomly without errors, remove uvloop and use tgcrypto!
 try:
     import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -14,11 +22,16 @@ try:
     asyncio.set_event_loop(loop)
     print("⚡ uvloop activated! Async operations will run at max speed.")
 except ImportError:
-    print("⚠️ uvloop not installed. Standard asyncio will be used. (pip install uvloop)")
-
+    print("⚠️ uvloop not installed. Standard asyncio will be used.")
 
 from shared_client import start_client, app
 import utils.func as global_state
+
+def run_flask():
+    """Hugging Face ko zinda rakhne ke liye Flask ko port 7860 par chalana"""
+    if flask_app:
+        port = int(os.environ.get("PORT", 7860))
+        flask_app.run(host="0.0.0.0", port=port, use_reloader=False)
 
 async def human_behavior_routine():
     while True:
@@ -68,13 +81,18 @@ async def load_and_run_plugins():
                 print(f"Running {plugin} plugin...")
                 await getattr(module, f"run_{plugin}_plugin")()  
         except Exception as e:
-            # 🟢 FIX: Ab koi kharab file bot ko freeze nahi karegi
             print(f"⚠️ Error loading plugin '{plugin}': {e}")
 
 async def main():
+    # 🟢 Start Web Dashboard in background thread
+    threading.Thread(target=run_flask, daemon=True).start()
+    print("🌐 Web Dashboard thread started on port 7860")
+
     await load_and_run_plugins()
     await setup_bot_commands()  
     asyncio.create_task(human_behavior_routine())
+    
+    # 🟢 Keeps the asyncio loop alive
     while True:
         await asyncio.sleep(1)  
 
