@@ -3,6 +3,7 @@ import json
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from pymongo import MongoClient
 from config import MONGO_DB, DB_NAME, OWNER_ID
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 app.secret_key = "super_secret_key_change_me" 
@@ -116,6 +117,68 @@ def user_details(user_id):
         
     user_logs = list(admin_logs.find({"admin_id": user_id}).sort("timestamp", -1).limit(20))
     return render_template("user_profile.html", user=user_info, task=active_task, logs=user_logs)
+
+# --- NAYA FEATURE: ADD USER VIA WEB ---
+@app.route("/admin/add_user", methods=["POST"])
+def web_add_user():
+    if session.get("role") != "owner":
+        return redirect(url_for("dashboard"))
+
+    try:
+        tg_id = int(request.form.get("tg_id"))
+        val = int(request.form.get("duration_value"))
+        unit = request.form.get("duration_unit")
+
+        now = datetime.now()
+        if unit == "min": exp = now + timedelta(minutes=val)
+        elif unit == "hours": exp = now + timedelta(hours=val)
+        elif unit == "days": exp = now + timedelta(days=val)
+        elif unit == "weeks": exp = now + timedelta(weeks=val)
+        elif unit == "month": exp = now + timedelta(days=30 * val)
+        elif unit == "year": exp = now + timedelta(days=365 * val)
+        else: exp = now + timedelta(days=val)
+
+        # Database update
+        premium_col.update_one(
+            {"user_id": tg_id},
+            {"$set": {"user_id": tg_id, "subscription_start": now, "subscription_end": exp, "expireAt": exp}},
+            upsert=True
+        )
+
+        # Admin log me save karna
+        admin_logs.insert_one({
+            "admin_id": session["admin_id"],
+            "admin_name": session.get("admin_name", "Boss"),
+            "action": f"Web App: Added Premium ({val} {unit})",
+            "target": str(tg_id),
+            "timestamp": now
+        })
+        flash(f"User {tg_id} successfully added!", "success")
+    except Exception as e:
+        flash(f"Error adding user: {e}", "error")
+
+    return redirect(url_for("list_premium_users"))
+
+# --- NAYA FEATURE: REMOVE USER VIA WEB ---
+@app.route("/admin/remove_user/<int:tg_id>")
+def web_remove_user(tg_id):
+    if session.get("role") != "owner":
+        return redirect(url_for("dashboard"))
+
+    # Premium se hatana aur web password delete karna
+    premium_col.delete_one({"user_id": tg_id})
+    admin_auth.delete_one({"admin_id": tg_id}) 
+
+    # Admin log me save karna
+    admin_logs.insert_one({
+        "admin_id": session["admin_id"],
+        "admin_name": session.get("admin_name", "Boss"),
+        "action": "Web App: Revoked Premium",
+        "target": str(tg_id),
+        "timestamp": datetime.now()
+    })
+    flash(f"User {tg_id} has been removed and banned from web panel.", "error")
+    return redirect(url_for("list_premium_users"))
 
 @app.route("/logout")
 def logout():
