@@ -23,6 +23,7 @@ Z, P, UB, UC = {}, {}, {}, {}
 
 ACTIVE_USERS = {}
 ACTIVE_USERS_FILE = "active_users.json"
+LAST_UPDATE_TIME = {} # 🟢 NEW: Progress bar update timer dictionary
 
 def load_active_users():
     try:
@@ -602,10 +603,16 @@ async def text_handler(c, m):
                     except: pass
                 
                 if n > 1:
-                    delay_time = random.uniform(17.5, 35.8)
-                    try: await pt.edit(f'Sleeping for {delay_time:.2f}s to act like human...')
-                    except: pass
-                    await asyncio.sleep(delay_time)
+                    # 🟢 NEW: Chunk Delay (Cool Down) and Fast Normal Sleep 🟢
+                    if (j + 1) % 25 == 0:
+                        try: await pt.edit("⏳ Cooling down for 60 seconds to prevent FloodWait...")
+                        except: pass
+                        await asyncio.sleep(60) 
+                    else:    
+                        delay_time = random.uniform(11.5, 20.8)
+                        try: await pt.edit(f'Sleeping for {delay_time:.2f}s to act like human...')
+                        except: pass
+                        await asyncio.sleep(delay_time)
             
             if j+1 == n:
                 await m.reply_text(f'Batch Completed ✅ Success: {success}/{n}')
