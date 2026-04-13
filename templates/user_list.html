@@ -3,26 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Premium Users List</title>
+    <title>Manage Premium Users</title>
     <style>
         body { margin: 0; padding: 20px; font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #09090b, #18181b, #27272a); color: white; min-height: 100vh; }
         .container { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; padding: 30px; max-width: 1000px; margin: auto; box-shadow: 0 15px 35px rgba(0,0,0,0.5); }
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px;}
         h2 { margin: 0; font-weight: 400; letter-spacing: 1px; color: gold;}
+        .stat-card { background: rgba(0, 0, 0, 0.3); border-radius: 15px; padding: 25px; margin-bottom: 30px; border: 1px solid rgba(16, 185, 129, 0.3); }
+        
+        /* Form Styles */
+        input, select { padding: 12px; border-radius: 8px; background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.2); outline: none;}
+        input:focus, select:focus { border-color: #10b981; }
+        
         table { width: 100%; border-collapse: collapse; margin-top: 20px; background: rgba(0,0,0,0.2); border-radius: 10px; overflow: hidden; }
         th, td { padding: 15px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); }
         th { background: rgba(255,255,255,0.05); color: #92FE9D; font-weight: 600; }
         tr:hover { background: rgba(255,255,255,0.02); }
+        
+        /* Buttons */
         .btn-back { background: rgba(255, 255, 255, 0.1); color: white; padding: 8px 15px; text-decoration: none; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); transition: 0.3s;}
         .btn-back:hover { background: rgba(255, 255, 255, 0.2); }
-        .btn-view { background: linear-gradient(90deg, #6366f1, #a855f7); color: white; padding: 6px 12px; text-decoration: none; border-radius: 6px; font-size: 0.9rem; font-weight: bold;}
+        .btn-view { background: linear-gradient(90deg, #6366f1, #a855f7); color: white; padding: 8px 15px; text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: bold; border: none; cursor: pointer; transition: 0.3s;}
+        .btn-view:hover { transform: scale(1.05); }
+        .btn-add { background: linear-gradient(90deg, #10b981, #059669); color: white; padding: 12px 20px; text-decoration: none; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; transition: 0.3s;}
+        .btn-add:hover { box-shadow: 0 0 15px rgba(16, 185, 129, 0.5); }
+        .btn-del { background: rgba(239, 68, 68, 0.8); color: white; padding: 8px 15px; text-decoration: none; border-radius: 8px; font-weight: bold; margin-left: 10px; transition: 0.3s;}
+        .btn-del:hover { background: red; }
+        
+        .flash { padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; font-weight: bold; }
+        .flash.success { background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #10b981; }
+        .flash.error { background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #ef4444; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h2>👥 All Premium Users</h2>
+            <h2>👥 Manage Premium Users</h2>
             <a href="/dashboard" class="btn-back">⬅️ Back to Dashboard</a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="stat-card">
+            <h3 style="margin-top: 0; color: #10b981;">➕ Add New Premium User</h3>
+            <form action="/admin/add_user" method="POST" style="display: flex; gap: 15px; flex-wrap: wrap;">
+                <input type="number" name="tg_id" placeholder="Telegram ID (e.g. 1234567)" required style="flex: 1; min-width: 200px;">
+                <input type="number" name="duration_value" placeholder="Duration (e.g. 30)" required style="width: 150px;">
+                <select name="duration_unit" required>
+                    <option value="days">Days</option>
+                    <option value="weeks">Weeks</option>
+                    <option value="month">Months</option>
+                    <option value="year">Years</option>
+                </select>
+                <button type="submit" class="btn-add">Give Access</button>
+            </form>
         </div>
         
         <table>
@@ -30,13 +70,13 @@
                 <tr>
                     <th>Telegram ID</th>
                     <th>Valid Till (Expiry)</th>
-                    <th>Action</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for u in users %}
                 <tr>
-                    <td style="font-weight: bold; font-family: monospace;">{{ u.user_id }}</td>
+                    <td style="font-weight: bold; font-family: monospace; font-size: 1.1rem;">{{ u.user_id }}</td>
                     <td>
                         {% if u.subscription_end %}
                             {{ u.subscription_end.strftime('%d-%m-%Y %H:%M') }}
@@ -44,11 +84,14 @@
                             Unknown
                         {% endif %}
                     </td>
-                    <td><a href="/admin/user/{{ u.user_id }}" class="btn-view">🔍 View Activity</a></td>
+                    <td>
+                        <a href="/admin/user/{{ u.user_id }}" class="btn-view">🔍 View Activity</a>
+                        <a href="/admin/remove_user/{{ u.user_id }}" class="btn-del" onclick="return confirm('Are you sure you want to completely ban this user from Bot and Dashboard?');">🗑️ Revoke</a>
+                    </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="3" style="text-align: center; padding: 30px; opacity: 0.5;">No Premium Users Found.</td>
+                    <td colspan="3" style="text-align: center; padding: 30px; opacity: 0.5;">No Premium Users Found. Start by adding one above!</td>
                 </tr>
                 {% endfor %}
             </tbody>
