@@ -217,25 +217,25 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
         try: d = int(d)
         except Exception: pass
 
+    # tcid = File jahan jayegi (Destination Channel)
+    # uid  = Progress Bar jahan dikhega (Aapka Bot)
+    tcid = d
+    rtmid = None
+    
+    cfg_chat = await get_user_data_key(uid, 'chat_id', None)
+    if cfg_chat:
+        if '/' in cfg_chat:
+            parts = cfg_chat.split('/', 1)
+            tcid = int(parts[0])
+            rtmid = int(parts[1]) if len(parts) > 1 else None
+        else:
+            tcid = int(cfg_chat)
+
     try:
-        cfg_chat = await get_user_data_key(d, 'chat_id', None)
-        tcid = d
-        rtmid = None
-        if cfg_chat:
-            if '/' in cfg_chat:
-                parts = cfg_chat.split('/', 1)
-                tcid = int(parts[0])
-                rtmid = int(parts[1]) if len(parts) > 1 else None
-            else:
-                tcid = int(cfg_chat)
-        
-        try: await c.get_chat(tcid)
-        except Exception: pass
-        
         if m.media:
             orig_text = m.caption.markdown if m.caption else ''
-            proc_text = await process_text_with_rules(d, orig_text)
-            user_cap = await get_user_data_key(d, 'caption', '')
+            proc_text = await process_text_with_rules(uid, orig_text)
+            user_cap = await get_user_data_key(uid, 'caption', '')
             raw_caption = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
             
             if task:
@@ -252,21 +252,22 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 success = await send_direct(c, m, tcid, ft, rtmid)
                 if success: return 'Sent directly.'
             
-            p = await c.send_message(d, '⏳ Initializing...')
+            # 🟢 FIX: Progress bar 'uid' (User Bot) mein bhejna
+            p = await c.send_message(uid, '⏳ Initializing...')
             
             forward_mode = await get_user_data_key(uid, "forward_mode", False)
             if forward_mode and not is_restricted:
                 try:
                     client_to_use = getattr(m, '_client', u if u else c)
                     await client_to_use.copy_message(chat_id=tcid, from_chat_id=m.chat.id, message_id=m.id, caption=ft if ft else None, reply_to_message_id=rtmid)
-                    await c.delete_messages(d, p.id)
+                    await c.delete_messages(uid, p.id)
                     return 'Fast Forwarded ✅'
                 except Exception as e:
-                    await c.edit_message_text(d, p.id, f"⚠️ **Forward Error:** `{str(e)[:30]}`\n🔄 Downloading...")
+                    await c.edit_message_text(uid, p.id, f"⚠️ **Forward Error:** `{str(e)[:30]}`\n🔄 Downloading...")
                     await asyncio.sleep(2)
             
             st = time.time()
-            await c.edit_message_text(d, p.id, '⬇️ Downloading...')
+            await c.edit_message_text(uid, p.id, '⬇️ Downloading...')
 
             c_name = f"{time.time()}"
             original_ext = ""
@@ -279,18 +280,19 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
     
             try:
                 client_to_use = getattr(m, '_client', u if u else c)
-                f = await client_to_use.download_media(m, file_name=c_name, progress=prog, progress_args=(c, d, p.id, st))
-            except Exception as dl_err:
+                # 🟢 FIX: progress_args mein 'uid' pass karna
+                f = await client_to_use.download_media(m, file_name=c_name, progress=prog, progress_args=(c, uid, p.id, st))
+            except Exception:
                 f = None
                 
             if not f:
-                await c.edit_message_text(d, p.id, 'Failed.')
+                await c.edit_message_text(uid, p.id, 'Failed.')
                 return 'Failed.'
             
-            await c.edit_message_text(d, p.id, 'Renaming...')
+            await c.edit_message_text(uid, p.id, 'Renaming...')
             
             if m.video or m.audio or m.document:
-                renamed_f = await rename_file(f, d, p)
+                renamed_f = await rename_file(f, uid, p)
                 if original_ext and not renamed_f.lower().endswith(original_ext):
                     corrected_name = renamed_f + original_ext
                     os.rename(renamed_f, corrected_name)
@@ -305,89 +307,59 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             if m.video or str(f).endswith(('.mp4', '.mkv')):
                  th = await generate_thumbnail(f, batch_wm, uid)
             if not th:
-                 th = thumbnail(d)
+                 th = thumbnail(uid)
             
             if fsize > 2 and Y:
                 st = time.time()
-                await c.edit_message_text(d, p.id, 'File is larger than 2GB. Using alternative method...')
+                await c.edit_message_text(uid, p.id, 'File is larger than 2GB. Using alternative method...')
                 await upd_dlg(Y)
                 mtd = await get_video_metadata(f)
                 dur, h, w = mtd['duration'], mtd['width'], mtd['height']
                 
-                send_funcs = {'video': Y.send_video, 'video_note': Y.send_video_note, 
-                            'voice': Y.send_voice, 'audio': Y.send_audio, 
-                            'photo': Y.send_photo, 'document': Y.send_document}
+                send_funcs = {'video': Y.send_video, 'video_note': Y.send_video_note, 'voice': Y.send_voice, 'audio': Y.send_audio, 'photo': Y.send_photo, 'document': Y.send_document}
                 
                 for mtype, func in send_funcs.items():
                     if f.endswith('.mp4'): mtype = 'video'
                     if getattr(m, mtype, None):
-                        sent = await func(LOG_GROUP, f, thumb=th if mtype == 'video' else None, 
-                                        duration=dur if mtype == 'video' else None, height=h if mtype == 'video' else None,
-                                        width=w if mtype == 'video' else None, caption=ft if m.caption and mtype not in ['video_note', 'voice'] else None, 
-                                        reply_to_message_id=rtmid, progress=prog, progress_args=(c, d, p.id, st))
+                        sent = await func(LOG_GROUP, f, thumb=th if mtype == 'video' else None, duration=dur if mtype == 'video' else None, height=h if mtype == 'video' else None, width=w if mtype == 'video' else None, caption=ft if m.caption and mtype not in ['video_note', 'voice'] else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st))
                         break
                 else:
-                    sent = await Y.send_document(LOG_GROUP, f, thumb=th, caption=ft if m.caption else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, d, p.id, st))
+                    sent = await Y.send_document(LOG_GROUP, f, thumb=th, caption=ft if m.caption else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st))
                 
-                await c.copy_message(d, LOG_GROUP, sent.id)
+                await c.copy_message(tcid, LOG_GROUP, sent.id)
                 os.remove(f)
-                await c.delete_messages(d, p.id)
+                await c.delete_messages(uid, p.id)
                 return 'Done (Large file).'
             
-            await c.edit_message_text(d, p.id, 'Uploading...')
+            await c.edit_message_text(uid, p.id, 'Uploading...')
             st = time.time()
 
             try:
-                video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.ogv']
-                audio_extensions = ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.aiff', '.ac3']
-                file_ext = os.path.splitext(f)[1].lower()
-                
-                if file_ext in ['.pdf', '.zip', '.rar', '.txt', '.doc', '.docx', '.apk', '.epub', '.py']:
-                    await c.send_document(tcid, document=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, d, p.id, st), reply_to_message_id=rtmid)
-                elif m.video or file_ext in video_extensions:
+                # 🟢 File 'tcid' (Destination) mein jayegi par Progress 'uid' (Bot) mein dikhega
+                if m.video or f.lower().endswith(('.mp4', '.mkv')):
                     mtd = await get_video_metadata(f)
-                    dur, h, w = mtd['duration'], mtd['width'], mtd['height']
-                    await c.send_video(tcid, video=f, caption=ft if m.caption else None, thumb=th, width=w, height=h, duration=dur, progress=prog, progress_args=(c, d, p.id, st), reply_to_message_id=rtmid)
-                elif m.video_note:
-                    await c.send_video_note(tcid, video_note=f, progress=prog, progress_args=(c, d, p.id, st), reply_to_message_id=rtmid)
-                elif m.voice:
-                    await c.send_voice(tcid, f, progress=prog, progress_args=(c, d, p.id, st), reply_to_message_id=rtmid)
-                elif m.sticker:
-                    await c.send_sticker(tcid, m.sticker.file_id, reply_to_message_id=rtmid)
-                elif m.audio or file_ext in audio_extensions:
-                    await c.send_audio(tcid, audio=f, caption=ft if m.caption else None, thumb=th, progress=prog, progress_args=(c, d, p.id, st), reply_to_message_id=rtmid)
-                elif m.photo:
-                    await c.send_photo(tcid, photo=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, d, p.id, st), reply_to_message_id=rtmid)
+                    await c.send_video(tcid, video=f, caption=ft if m.caption else None, thumb=th, width=mtd['width'], height=mtd['height'], duration=mtd['duration'], progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
+                elif m.document or f.lower().endswith(('.pdf', '.zip', '.apk')):
+                    await c.send_document(tcid, document=f, caption=ft if m.caption else None, thumb=th, progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
                 else:
-                    await c.send_document(tcid, document=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, d, p.id, st), reply_to_message_id=rtmid)
+                    await c.send_document(tcid, document=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
             except Exception as e:
-                await c.edit_message_text(d, p.id, f'Upload failed: {str(e)[:30]}')
+                await c.edit_message_text(uid, p.id, f'Upload failed: {str(e)[:30]}')
                 if os.path.exists(f): os.remove(f)
                 return 'Failed.'
             
             os.remove(f)
-            await c.delete_messages(d, p.id)
+            await c.delete_messages(uid, p.id)
             return 'Done.'
             
         elif m.text:
             orig_text = m.text.markdown
-            proc_text = await process_text_with_rules(d, orig_text)
-            user_cap = await get_user_data_key(d, 'caption', '')
+            proc_text = await process_text_with_rules(uid, orig_text)
+            user_cap = await get_user_data_key(uid, 'caption', '')
             raw_caption = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
-            
-            if task:
-                for word in task.get("remove_list", []): 
-                    raw_caption = re.sub(re.escape(word), "", raw_caption, flags=re.IGNORECASE)
-                for old, new in task.get("replace_dict", {}).items(): 
-                    raw_caption = re.sub(re.escape(old), new, raw_caption, flags=re.IGNORECASE)
-            
-            raw_caption = re.sub(r'\.(mp4|mkv|pdf|avi|webm|jpg|png)', '', raw_caption, flags=re.IGNORECASE)
             ft = beautify_caption(raw_caption)
-            
             await c.send_message(tcid, text=ft if ft else orig_text, reply_to_message_id=rtmid)
             return 'Sent.'
-        else:
-            return 'Skipped: Unsupported Type.'
             
     except Exception as e:
         return f'Error: {str(e)[:50]}'
