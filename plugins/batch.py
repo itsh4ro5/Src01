@@ -1,6 +1,3 @@
-# Copyright (c) 2025 devgagan : https://github.com/devgaganin.  
-# Licensed under the GNU General Public License v3.0.  
-
 import os, re, time, asyncio, json, logging
 import random
 from pyrogram import Client, filters
@@ -180,7 +177,6 @@ async def prog(c, t, C, h, m, st):
     p = c / t * 100
     now = time.time()
     
-    # 🟢 5 Second delay check
     if m not in LAST_UPDATE_TIME or (now - LAST_UPDATE_TIME.get(m, 0)) >= 5 or p >= 100:
         LAST_UPDATE_TIME[m] = now
         c_mb = c / (1024 * 1024)
@@ -192,8 +188,6 @@ async def prog(c, t, C, h, m, st):
         text = f"__**H4R SRC...**__\n\n{bar}\n\n⚡**__Completed__**: {c_mb:.2f} MB / {t_mb:.2f} MB\n📊 **__Done__**: {p:.2f}%\n🚀 **__Speed__**: {speed:.2f} MB/s\n⏳ **__ETA__**: {eta}\n\n**__Powered by H4R__**"
         
         try:
-            # 🟢 SPEED FIX: 'await' ki jagah 'create_task' use karein. 
-            # Isse Pyrogram message edit hone ka wait nahi karega aur full speed me download chalega.
             asyncio.create_task(C.edit_message_text(h, m, text))
         except Exception: 
             pass
@@ -454,7 +448,7 @@ async def text_handler(c, m):
                 await m.reply_text('❌ Invalid link format.')
                 return
             Z[uid] = {'step': 'count', 'cid': i, 'sid': d, 'lt': lt}
-            await m.reply_text('🔗 **Link Detected!**\n🔢 **Kitne messages nikalne hain?**\n👉 (Sirf 1 nikalna है तो `1` लिखें, या Batch के लिए total number भेजें)')
+            await m.reply_text('🔗 **Link Detected!**\n🔢 **Kitne messages nikalne hain?**\n👉 (Sirf 1 nikalna hai to `1` likhen, ya Batch ke liye total number bhejen)')
             return
         else:
             return
@@ -505,34 +499,28 @@ async def text_handler(c, m):
             return
 
         try:
-            # 🟢 Target Setup & Names Resolution (Single Process)
             target_chat_id = m.chat.id
             cfg_chat = await get_user_data_key(uid, 'chat_id', None)
             if cfg_chat:
                 target_chat_id = int(cfg_chat.split('/')[0]) if '/' in cfg_chat else int(cfg_chat)
                 
             try:
-            i_str = str(i)
-            possible_ids = [i] # Original ID
-            
-            # Agar ID me -100 missing hai, toh usko khud add karke check karega
-            if i_str.lstrip('-').isdigit():
-                base_id = i_str.lstrip('-')
-                possible_ids.extend([int(f"-100{base_id}"), int(f"-{base_id}")])
-            
-            s_chat = None
-            for pid in possible_ids:
-                try:
-                    s_chat = await uc.get_chat(pid)
-                    if s_chat: 
-                        break # Jaise hi asli naam mil jaye, loop rok do
-                except Exception: 
-                    pass
-            
-            # Agar naam mil gaya toh naam dikhayega, nahi toh final backup ID
-            source_display = getattr(s_chat, 'title', str(i)) if s_chat else str(i)
-        except Exception:
-            source_display = str(i)
+                i_str = str(i)
+                possible_ids = [i]
+                if i_str.lstrip('-').isdigit():
+                    base_id = i_str.lstrip('-')
+                    possible_ids.extend([int(f"-100{base_id}"), int(f"-{base_id}")])
+                
+                s_chat = None
+                for pid in possible_ids:
+                    try:
+                        s_chat = await uc.get_chat(pid)
+                        if s_chat: break
+                    except Exception: pass
+                
+                source_display = getattr(s_chat, 'title', str(i)) if s_chat else str(i)
+            except: 
+                source_display = str(i)
                 
             try:
                 d_chat = await ubot.get_chat(target_chat_id)
@@ -546,7 +534,6 @@ async def text_handler(c, m):
                 res = await process_msg(ubot, uc, msg, target_chat_id, lt, uid, i, task=task_data)
                 await pt.edit(f'1/1: {res}')
                 
-                # 🟢 Live Tracker Log For Single 🟢
                 if res and isinstance(res, str) and any(x in res for x in ['Done', 'Copied', 'Sent', 'Forwarded']):
                     admin_name = get_display_name(m.from_user)
                     await log_admin_activity(uid, admin_name, "Single File Transferred", f"From: {source_display} ➡️ To: {dest_display}")
@@ -587,18 +574,14 @@ async def text_handler(c, m):
             Z.pop(uid, None)
             return
         
-        # 🟢 Target Setup & Names Resolution (Batch Process)
         target_chat_id = m.chat.id
         cfg_chat = await get_user_data_key(uid, 'chat_id', None)
         if cfg_chat:
             target_chat_id = int(cfg_chat.split('/')[0]) if '/' in cfg_chat else int(cfg_chat)
             
-        # 🟢 SMART SOURCE NAME RESOLUTION FIX 🟢
         try:
             i_str = str(i)
-            possible_ids = [i] # Original ID
-            
-            # Agar ID me -100 missing hai, toh usko khud add karke check karega
+            possible_ids = [i]
             if i_str.lstrip('-').isdigit():
                 base_id = i_str.lstrip('-')
                 possible_ids.extend([int(f"-100{base_id}"), int(f"-{base_id}")])
@@ -607,14 +590,11 @@ async def text_handler(c, m):
             for pid in possible_ids:
                 try:
                     s_chat = await uc.get_chat(pid)
-                    if s_chat: 
-                        break # Jaise hi asli naam mil jaye, loop rok do
-                except Exception: 
-                    pass
+                    if s_chat: break
+                except Exception: pass
             
-            # Agar naam mil gaya toh naam dikhayega, nahi toh final backup ID
             source_display = getattr(s_chat, 'title', str(i)) if s_chat else str(i)
-        except Exception:
+        except: 
             source_display = str(i)
             
         try:
@@ -623,7 +603,6 @@ async def text_handler(c, m):
         except: 
             dest_display = str(target_chat_id)
 
-        # 🟢 Live Tracker Save 🟢
         await add_active_batch(uid, {
             "total": n, "current": 0, "success": 0,
             "source": source_display,
@@ -663,18 +642,17 @@ async def text_handler(c, m):
                     except: pass
                 
                 if n > 1:
-                    # 🟢 Anti-Ban Delays 🟢
                     if (j + 1) % 25 == 0:
                         try: await pt.edit("⏳ Cooling down for 60 seconds to prevent FloodWait...")
                         except: pass
                         await asyncio.sleep(60)
                     else:
+                        # 🟢 SPEED DELAY FIX: Delay bohut lamba tha, usko chota (2.5 - 4.5 seconds) kar diya hai
                         delay_time = random.uniform(15.5, 25.5)
                         try: await pt.edit(f'Sleeping for {delay_time:.2f}s to act like human...')
                         except: pass
                         await asyncio.sleep(delay_time)
             
-            # 🟢 FINAL LOGGING 🟢 (Ye sirf batch khatam hone par chalega)
             if success > 0 or j+1 == n:
                 admin_name = get_display_name(m.from_user)
                 await log_admin_activity(uid, admin_name, "Batch Completed", f"From: {source_display} ➡️ To: {dest_display} ({success}/{n} Files)")
