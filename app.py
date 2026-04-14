@@ -180,6 +180,29 @@ def web_remove_user(tg_id):
     flash(f"User {tg_id} has been removed and banned from web panel.", "error")
     return redirect(url_for("list_premium_users"))
 
+# --- NAYA FEATURE: CLEAR HISTORY (LOGS) ---
+@app.route("/clear_logs")
+def clear_logs():
+    if "admin_id" not in session:
+        return redirect(url_for("login"))
+        
+    admin_id = session["admin_id"]
+    is_owner = session.get("role") == "owner"
+    
+    try:
+        if is_owner:
+            # Boss clears ALL logs (Database space saved!)
+            admin_logs.delete_many({})
+            flash("All global logs have been cleared successfully! Space saved.", "success")
+        else:
+            # Premium User clears ONLY their own logs
+            admin_logs.delete_many({"admin_id": admin_id})
+            flash("Your history has been cleared successfully!", "success")
+    except Exception as e:
+        flash(f"Error clearing logs: {e}", "error")
+        
+    return redirect(url_for("dashboard"))    
+
 @app.route("/logout")
 def logout():
     session.clear()
