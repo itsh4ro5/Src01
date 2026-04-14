@@ -1,3 +1,6 @@
+# Copyright (c) 2025 devgagan : https://github.com/devgaganin.  
+# Licensed under the GNU General Public License v3.0.  
+
 import os, re, time, asyncio, json, logging
 import random
 from pyrogram import Client, filters
@@ -249,21 +252,21 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 success = await send_direct(c, m, tcid, ft, rtmid)
                 if success: return 'Sent directly.'
             
-            p = await c.send_message(uid, '⏳ Initializing...')
+            p = await c.send_message(d, '⏳ Initializing...')
             
             forward_mode = await get_user_data_key(uid, "forward_mode", False)
             if forward_mode and not is_restricted:
                 try:
                     client_to_use = getattr(m, '_client', u if u else c)
                     await client_to_use.copy_message(chat_id=tcid, from_chat_id=m.chat.id, message_id=m.id, caption=ft if ft else None, reply_to_message_id=rtmid)
-                    await c.delete_messages(uid, p.id)
+                    await c.delete_messages(d, p.id)
                     return 'Fast Forwarded ✅'
                 except Exception as e:
-                    await c.edit_message_text(uid, p.id, f"⚠️ **Forward Error:** `{str(e)[:30]}`\n🔄 Downloading...")
+                    await c.edit_message_text(d, p.id, f"⚠️ **Forward Error:** `{str(e)[:30]}`\n🔄 Downloading...")
                     await asyncio.sleep(2)
             
             st = time.time()
-            await c.edit_message_text(uid, p.id, '⬇️ Downloading...')
+            await c.edit_message_text(d, p.id, '⬇️ Downloading...')
 
             c_name = f"{time.time()}"
             original_ext = ""
@@ -281,10 +284,10 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 f = None
                 
             if not f:
-                await c.edit_message_text(uid, p.id, 'Failed.')
+                await c.edit_message_text(d, p.id, 'Failed.')
                 return 'Failed.'
             
-            await c.edit_message_text(uid, p.id, 'Renaming...')
+            await c.edit_message_text(d, p.id, 'Renaming...')
             
             if m.video or m.audio or m.document:
                 renamed_f = await rename_file(f, d, p)
@@ -306,7 +309,7 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             
             if fsize > 2 and Y:
                 st = time.time()
-                await c.edit_message_text(uid, p.id, 'File is larger than 2GB. Using alternative method...')
+                await c.edit_message_text(d, p.id, 'File is larger than 2GB. Using alternative method...')
                 await upd_dlg(Y)
                 mtd = await get_video_metadata(f)
                 dur, h, w = mtd['duration'], mtd['width'], mtd['height']
@@ -328,7 +331,7 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 
                 await c.copy_message(d, LOG_GROUP, sent.id)
                 os.remove(f)
-                await c.delete_messages(uid, p.id)
+                await c.delete_messages(d, p.id)
                 return 'Done (Large file).'
             
             await c.edit_message_text(d, p.id, 'Uploading...')
@@ -363,7 +366,7 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 return 'Failed.'
             
             os.remove(f)
-            await c.delete_messages(uid, p.id)
+            await c.delete_messages(d, p.id)
             return 'Done.'
             
         elif m.text:
@@ -648,7 +651,7 @@ async def text_handler(c, m):
                         await asyncio.sleep(60)
                     else:
                         # 🟢 SPEED DELAY FIX: Delay bohut lamba tha, usko chota (2.5 - 4.5 seconds) kar diya hai
-                        delay_time = random.uniform(15.5, 25.5)
+                        delay_time = random.uniform(2.5, 4.5)
                         try: await pt.edit(f'Sleeping for {delay_time:.2f}s to act like human...')
                         except: pass
                         await asyncio.sleep(delay_time)
