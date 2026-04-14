@@ -21,6 +21,13 @@
         .btn-logout { background: rgba(239, 68, 68, 0.8); color: white; padding: 10px 20px; text-decoration: none; border-radius: 10px; font-weight: bold; }
         .btn-primary { background: linear-gradient(90deg, #10b981, #3b82f6); color: white; padding: 10px 20px; text-decoration: none; border-radius: 10px; font-weight: bold; display: inline-block; margin-bottom: 20px;}
         code { background: rgba(255,255,255,0.1); padding: 3px 8px; border-radius: 5px; color: #92FE9D; }
+        
+        /* 🟢 Naya CSS: Delete Button aur Flash Message ke liye */
+        .btn-del { background: rgba(239, 68, 68, 0.8); color: white; padding: 8px 15px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 0.9rem; transition: 0.3s; border: none; cursor: pointer; }
+        .btn-del:hover { background: red; box-shadow: 0 0 10px red; }
+        .flash { padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; font-weight: bold; }
+        .flash.success { background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #10b981; }
+        .flash.error { background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #ef4444; }
     </style>
 </head>
 <body>
@@ -44,9 +51,21 @@
             </div>
         </div>
 
-        <a href="/admin/users" class="btn-primary">👁️ Explore All Premium Users</a>
+        <a href="/admin/users" class="btn-primary">👁️ Explore & Manage Premium Users</a>
 
-        <h3>📋 Global Logs (Har Admin Ki Activity)</h3>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 30px;">
+            <h3>📋 Global Logs (Har Admin Ki Activity)</h3>
+            <a href="/clear_logs" class="btn-del" onclick="return confirm('⚠️ WARNING: Ye database se saare users ki history delete kar dega. Continue?');">🗑️ Clear All History</a>
+        </div>
+        
         <table>
             <thead>
                 <tr>
@@ -66,7 +85,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="4" style="text-align: center; opacity: 0.5; padding: 30px;">No activities found yet.</td>
+                    <td colspan="4" style="text-align: center; opacity: 0.5; padding: 30px;">No activities found yet. Database is clean!</td>
                 </tr>
                 {% endfor %}
             </tbody>
