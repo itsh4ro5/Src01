@@ -7,28 +7,26 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from pymongo import MongoClient
 from config import MONGO_DB, DB_NAME, OWNER_ID
 
-# 🟢 100% BULLETPROOF BOT STARTER 🟢
-# Ye check karega ki bot pehle se start toh nahi ho gaya, taaki Database lock error na aaye!
-LOCK_FILE = "/tmp/bot_running.lock"
-
-if not os.path.exists(LOCK_FILE):
+# 🟢 100% SAFEST BOT STARTER (No Lock Files Bug) 🟢
+def start_bot_safely():
     try:
-        # Lock file banao taaki dusra process bot start na kare
-        with open(LOCK_FILE, "w") as f:
-            f.write("running")
-            
-        print("🚀 Starting Main Bot Process in background...")
-        # FIX: 'python' ki jagah sys.executable use kiya, aur errors ko terminal me bheja
-        subprocess.Popen(
-            [sys.executable, "main.py"], 
-            stdout=sys.stdout, 
-            stderr=sys.stderr
-        )
+        # Server ki asali processes check karega (Lock file ka jhanjhat khatam)
+        output = subprocess.check_output(["ps", "x"]).decode()
+        if "main.py" in output:
+            print("✅ Bot is already running in background.")
+            return
+    except Exception:
+        pass
+        
+    print("🚀 Starting Main Bot Process...")
+    try:
+        # Bot ko force start karega aur saare errors Logs me dikhayega
+        subprocess.Popen([sys.executable, "main.py"], stdout=sys.stdout, stderr=sys.stderr)
     except Exception as e:
         print(f"⚠️ Failed to start bot: {e}")
-        # Agar start me fail ho, toh lock hata do
-        if os.path.exists(LOCK_FILE):
-            os.remove(LOCK_FILE)
+
+# App start hote hi bot ko automatically on karega
+start_bot_safely()
 
 app = Flask(__name__)
 app.secret_key = "super_secret_key_change_me" 
@@ -44,15 +42,14 @@ try:
 except Exception as e:
     print(f"Database connection error: {e}")
 
-# Safe function to read live tasks without crashing Pyrogram
 def get_active_task(user_id):
     try:
         if os.path.exists("active_users.json"):
             with open("active_users.json", "r") as f:
                 data = json.load(f)
                 return data.get(str(user_id))
-    except Exception as e:
-        print(f"Task read error: {e}")
+    except Exception:
+        pass
     return None
 
 @app.route("/", methods=["GET", "POST"])
@@ -72,7 +69,6 @@ def login():
                 session["admin_id"] = tg_id
                 session["admin_name"] = admin.get("admin_name", "Admin")
                 
-                # Role Based Access Control
                 if tg_id in OWNER_ID:
                     session["role"] = "owner"
                 else:
@@ -98,7 +94,6 @@ def dashboard():
     premium_users_count = premium_col.count_documents({})
 
     if is_owner:
-        # OWNER VIEW
         logs = list(admin_logs.find().sort("timestamp", -1).limit(50))
         premium_users_list = list(premium_col.find({}))
         view_type = "Global Overview (Owner)"
@@ -111,9 +106,7 @@ def dashboard():
                                view_type=view_type,
                                is_owner=is_owner)
     else:
-        # ADMIN VIEW
         current_task = get_active_task(admin_id)
-            
         logs = list(admin_logs.find({"admin_id": admin_id}).sort("timestamp", -1).limit(50))
         view_type = f"Personal Dashboard ({session['admin_name']})"
         return render_template("user_dashboard.html", 
@@ -139,11 +132,9 @@ def user_details(user_id):
 
     user_info = premium_col.find_one({"user_id": user_id})
     active_task = get_active_task(user_id)
-        
     user_logs = list(admin_logs.find({"admin_id": user_id}).sort("timestamp", -1).limit(20))
     return render_template("user_profile.html", user=user_info, task=active_task, logs=user_logs)
 
-# --- ADD USER VIA WEB ---
 @app.route("/admin/add_user", methods=["POST"])
 def web_add_user():
     if session.get("role") != "owner":
@@ -182,7 +173,6 @@ def web_add_user():
 
     return redirect(url_for("list_premium_users"))
 
-# --- REMOVE USER VIA WEB ---
 @app.route("/admin/remove_user/<int:tg_id>")
 def web_remove_user(tg_id):
     if session.get("role") != "owner":
@@ -201,7 +191,6 @@ def web_remove_user(tg_id):
     flash(f"User {tg_id} has been removed and banned.", "error")
     return redirect(url_for("list_premium_users"))
 
-# --- CLEAR LOGS HISTORY ---
 @app.route("/clear_logs")
 def clear_logs():
     if "admin_id" not in session:
@@ -213,14 +202,14 @@ def clear_logs():
     try:
         if is_owner:
             admin_logs.delete_many({})
-            flash("All global logs have been cleared successfully! Space saved.", "success")
+            flash("All global logs have been cleared successfully!", "success")
         else:
             admin_logs.delete_many({"admin_id": admin_id})
             flash("Your history has been cleared successfully!", "success")
     except Exception as e:
         flash(f"Error clearing logs: {e}", "error")
         
-    return redirect(url_for("dashboard"))
+    return redirect(url_for("dashboard"))    
 
 @app.route("/logout")
 def logout():
