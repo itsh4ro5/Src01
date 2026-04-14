@@ -18,6 +18,13 @@
         .btn-logout { background: rgba(239, 68, 68, 0.8); color: white; padding: 10px 20px; text-decoration: none; border-radius: 10px; font-weight: bold; }
         code { background: rgba(255,255,255,0.1); padding: 3px 8px; border-radius: 5px; color: #92FE9D; }
         .progress-text { font-size: 1.2rem; font-weight: bold; color: #00C9FF; }
+
+        /* 🟢 Naya CSS: Delete Button aur Flash Message ke liye */
+        .btn-del { background: rgba(239, 68, 68, 0.8); color: white; padding: 8px 15px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 0.9rem; transition: 0.3s; border: none; cursor: pointer; }
+        .btn-del:hover { background: red; box-shadow: 0 0 10px red; }
+        .flash { padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; font-weight: bold; }
+        .flash.success { background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #10b981; }
+        .flash.error { background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #ef4444; }
     </style>
 </head>
 <body>
@@ -30,11 +37,11 @@
             <a href="/logout" class="btn-logout">Logout</a>
         </div>
 
-        <h3>📡 Live Monitor (Human-Friendly View)</h3>
+        <h3>📡 Live Monitor (Aapka Current Task)</h3>
         <div class="stat-card">
             {% if task %}
-                <p><strong>📤 Source (Kahan se):</strong> <span style="color: #ffd700; font-size: 1.2rem;">{{ task.source }}</span></p>
-                <p><strong>📥 Destination (Kahan tak):</strong> <span style="color: #92FE9D; font-size: 1.2rem;">{{ task.destination }}</span></p>
+                <p><strong>📤 Source (Kahan se):</strong> <span style="color: gold; font-size: 1.1rem; font-weight: bold;">{{ task.source }}</span></p>
+                <p><strong>📥 Destination (Kahan tak):</strong> <span style="color: #00ffcc; font-size: 1.1rem; font-weight: bold;">{{ task.destination }}</span></p>
                 <p><strong>📊 Progress:</strong> <span class="progress-text">{{ task.success }} / {{ task.total }} files done</span></p>
                 <p style="font-size: 0.8rem; opacity: 0.5;">ID Trace: {{ task.source_id }} ➡️ {{ task.dest_id }}</p>
             {% else %}
@@ -42,7 +49,19 @@
             {% endif %}
         </div>
 
-        <h3>📋 History Khata (Aapki Activity)</h3>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 30px;">
+            <h3>📋 History Khata (Aapki Activity)</h3>
+            <a href="/clear_logs" class="btn-del" onclick="return confirm('Are you sure you want to clear your history?');">🗑️ Clear My History</a>
+        </div>
+
         <table>
             <thead>
                 <tr>
