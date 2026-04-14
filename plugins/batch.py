@@ -180,6 +180,7 @@ async def prog(c, t, C, h, m, st):
     p = c / t * 100
     now = time.time()
     
+    # 🟢 5 Second delay check
     if m not in LAST_UPDATE_TIME or (now - LAST_UPDATE_TIME.get(m, 0)) >= 5 or p >= 100:
         LAST_UPDATE_TIME[m] = now
         c_mb = c / (1024 * 1024)
@@ -187,10 +188,16 @@ async def prog(c, t, C, h, m, st):
         bar = '🟢' * int(p / 10) + '🔴' * (10 - int(p / 10))
         speed = c / (now - st) / (1024 * 1024) if now > st else 0
         eta = time.strftime('%M:%S', time.gmtime((t - c) / (speed * 1024 * 1024))) if speed > 0 else '00:00'
+        
+        text = f"__**H4R SRC...**__\n\n{bar}\n\n⚡**__Completed__**: {c_mb:.2f} MB / {t_mb:.2f} MB\n📊 **__Done__**: {p:.2f}%\n🚀 **__Speed__**: {speed:.2f} MB/s\n⏳ **__ETA__**: {eta}\n\n**__Powered by H4R__**"
+        
         try:
-            await C.edit_message_text(h, m, f"__**H4R SRC...**__\n\n{bar}\n\n⚡**__Completed__**: {c_mb:.2f} MB / {t_mb:.2f} MB\n📊 **__Done__**: {p:.2f}%\n🚀 **__Speed__**: {speed:.2f} MB/s\n⏳ **__ETA__**: {eta}\n\n**__Powered by H4R__**")
+            # 🟢 SPEED FIX: 'await' ki jagah 'create_task' use karein. 
+            # Isse Pyrogram message edit hone ka wait nahi karega aur full speed me download chalega.
+            asyncio.create_task(C.edit_message_text(h, m, text))
         except Exception: 
             pass
+            
         if p >= 100: 
             LAST_UPDATE_TIME.pop(m, None)
 
@@ -505,10 +512,27 @@ async def text_handler(c, m):
                 target_chat_id = int(cfg_chat.split('/')[0]) if '/' in cfg_chat else int(cfg_chat)
                 
             try:
-                s_chat = await uc.get_chat(i)
-                source_display = getattr(s_chat, 'title', str(i))
-            except: 
-                source_display = str(i)
+            i_str = str(i)
+            possible_ids = [i] # Original ID
+            
+            # Agar ID me -100 missing hai, toh usko khud add karke check karega
+            if i_str.lstrip('-').isdigit():
+                base_id = i_str.lstrip('-')
+                possible_ids.extend([int(f"-100{base_id}"), int(f"-{base_id}")])
+            
+            s_chat = None
+            for pid in possible_ids:
+                try:
+                    s_chat = await uc.get_chat(pid)
+                    if s_chat: 
+                        break # Jaise hi asli naam mil jaye, loop rok do
+                except Exception: 
+                    pass
+            
+            # Agar naam mil gaya toh naam dikhayega, nahi toh final backup ID
+            source_display = getattr(s_chat, 'title', str(i)) if s_chat else str(i)
+        except Exception:
+            source_display = str(i)
                 
             try:
                 d_chat = await ubot.get_chat(target_chat_id)
@@ -569,10 +593,28 @@ async def text_handler(c, m):
         if cfg_chat:
             target_chat_id = int(cfg_chat.split('/')[0]) if '/' in cfg_chat else int(cfg_chat)
             
+        # 🟢 SMART SOURCE NAME RESOLUTION FIX 🟢
         try:
-            s_chat = await uc.get_chat(i)
-            source_display = getattr(s_chat, 'title', str(i))
-        except: 
+            i_str = str(i)
+            possible_ids = [i] # Original ID
+            
+            # Agar ID me -100 missing hai, toh usko khud add karke check karega
+            if i_str.lstrip('-').isdigit():
+                base_id = i_str.lstrip('-')
+                possible_ids.extend([int(f"-100{base_id}"), int(f"-{base_id}")])
+            
+            s_chat = None
+            for pid in possible_ids:
+                try:
+                    s_chat = await uc.get_chat(pid)
+                    if s_chat: 
+                        break # Jaise hi asli naam mil jaye, loop rok do
+                except Exception: 
+                    pass
+            
+            # Agar naam mil gaya toh naam dikhayega, nahi toh final backup ID
+            source_display = getattr(s_chat, 'title', str(i)) if s_chat else str(i)
+        except Exception:
             source_display = str(i)
             
         try:
