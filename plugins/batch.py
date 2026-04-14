@@ -1,3 +1,6 @@
+# Copyright (c) 2025 devgagan : https://github.com/devgaganin.  
+# Licensed under the GNU General Public License v3.0.  
+
 import os, re, time, asyncio, json, logging
 import random
 from pyrogram import Client, filters
@@ -177,7 +180,6 @@ async def prog(c, t, C, h, m, st):
     p = c / t * 100
     now = time.time()
     
-    # 🟢 Strict 5 Second Delay for Download Speed Fix
     if m not in LAST_UPDATE_TIME or (now - LAST_UPDATE_TIME.get(m, 0)) >= 5 or p >= 100:
         LAST_UPDATE_TIME[m] = now
         c_mb = c / (1024 * 1024)
@@ -496,7 +498,24 @@ async def text_handler(c, m):
             return
 
         try:
+            # 🟢 Target Setup & Names Resolution (Single Process)
             target_chat_id = m.chat.id
+            cfg_chat = await get_user_data_key(uid, 'chat_id', None)
+            if cfg_chat:
+                target_chat_id = int(cfg_chat.split('/')[0]) if '/' in cfg_chat else int(cfg_chat)
+                
+            try:
+                s_chat = await uc.get_chat(i)
+                source_display = getattr(s_chat, 'title', str(i))
+            except: 
+                source_display = str(i)
+                
+            try:
+                d_chat = await ubot.get_chat(target_chat_id)
+                dest_display = getattr(d_chat, 'title', "Private / Bot Chat")
+            except: 
+                dest_display = str(target_chat_id)
+
             msg = await get_msg(ubot, uc, i, s, lt)
             if msg:
                 task_data = {"watermark": await get_user_data_key(uid, "watermark", "")}
@@ -506,7 +525,7 @@ async def text_handler(c, m):
                 # 🟢 Live Tracker Log For Single 🟢
                 if res and isinstance(res, str) and any(x in res for x in ['Done', 'Copied', 'Sent', 'Forwarded']):
                     admin_name = get_display_name(m.from_user)
-                    await log_admin_activity(uid, admin_name, "Single File Transferred", f"Source: {i} ➡️ Target: {target_chat_id}")
+                    await log_admin_activity(uid, admin_name, "Single File Transferred", f"From: {source_display} ➡️ To: {dest_display}")
             else:
                 await pt.edit('⚠️ Message not found! (Private Channel / Removed)')
         except Exception as e:
@@ -544,12 +563,31 @@ async def text_handler(c, m):
             Z.pop(uid, None)
             return
         
-        # 🟢 Live Tracker Save 🟢
+        # 🟢 Target Setup & Names Resolution (Batch Process)
         target_chat_id = m.chat.id
+        cfg_chat = await get_user_data_key(uid, 'chat_id', None)
+        if cfg_chat:
+            target_chat_id = int(cfg_chat.split('/')[0]) if '/' in cfg_chat else int(cfg_chat)
+            
+        try:
+            s_chat = await uc.get_chat(i)
+            source_display = getattr(s_chat, 'title', str(i))
+        except: 
+            source_display = str(i)
+            
+        try:
+            d_chat = await ubot.get_chat(target_chat_id)
+            dest_display = getattr(d_chat, 'title', "Private / Bot Chat")
+        except: 
+            dest_display = str(target_chat_id)
+
+        # 🟢 Live Tracker Save 🟢
         await add_active_batch(uid, {
             "total": n, "current": 0, "success": 0,
-            "source": str(i),
-            "destination": str(target_chat_id),
+            "source": source_display,
+            "destination": dest_display,
+            "source_id": str(i),
+            "dest_id": str(target_chat_id),
             "cancel_requested": False, "progress_message_id": pt.id
         })
         
@@ -575,9 +613,6 @@ async def text_handler(c, m):
                         
                         if res and isinstance(res, str) and any(x in res for x in ['Done', 'Copied', 'Sent', 'Forwarded']):
                             success += 1
-                            # 🟢 Admin Database Log 🟢
-                            admin_name = get_display_name(m.from_user)
-                            await log_admin_activity(uid, admin_name, "Batch File Processed", f"Source: {i} ➡️ Target: {target_chat_id}")
                     else:
                         try: await pt.edit(f"⚠️ Skipped {mid}: Not found.")
                         except: pass
@@ -596,6 +631,11 @@ async def text_handler(c, m):
                         try: await pt.edit(f'Sleeping for {delay_time:.2f}s to act like human...')
                         except: pass
                         await asyncio.sleep(delay_time)
+            
+            # 🟢 FINAL LOGGING 🟢 (Ye sirf batch khatam hone par chalega)
+            if success > 0 or j+1 == n:
+                admin_name = get_display_name(m.from_user)
+                await log_admin_activity(uid, admin_name, "Batch Completed", f"From: {source_display} ➡️ To: {dest_display} ({success}/{n} Files)")
             
             if j+1 == n:
                 await m.reply_text(f'Batch Completed ✅ Success: {success}/{n}')
