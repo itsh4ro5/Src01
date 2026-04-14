@@ -30,12 +30,13 @@
             <a href="/logout" class="btn-logout">Logout</a>
         </div>
 
-        <h3>📡 Live Monitor (Aapka Current Task)</h3>
+        <h3>📡 Live Monitor (Human-Friendly View)</h3>
         <div class="stat-card">
             {% if task %}
-                <p><strong>📤 Source (Kahan se):</strong> <code>{{ task.source }}</code></p>
-                <p><strong>📥 Destination (Kahan tak):</strong> <code>{{ task.destination }}</code></p>
+                <p><strong>📤 Source (Kahan se):</strong> <span style="color: #ffd700; font-size: 1.2rem;">{{ task.source }}</span></p>
+                <p><strong>📥 Destination (Kahan tak):</strong> <span style="color: #92FE9D; font-size: 1.2rem;">{{ task.destination }}</span></p>
                 <p><strong>📊 Progress:</strong> <span class="progress-text">{{ task.success }} / {{ task.total }} files done</span></p>
+                <p style="font-size: 0.8rem; opacity: 0.5;">ID Trace: {{ task.source_id }} ➡️ {{ task.dest_id }}</p>
             {% else %}
                 <p style="opacity: 0.6; font-size: 1.1rem;">🟢 No Active Task. Bot is idle right now.</p>
             {% endif %}
