@@ -5,6 +5,12 @@ from pymongo import MongoClient
 from config import MONGO_DB, DB_NAME, OWNER_ID
 from datetime import datetime, timedelta
 
+try:
+    subprocess.Popen(["python", "main.py"])
+    print("🤖 Main Bot Process Started in Background!")
+except Exception as e:
+    print(f"Failed to start bot: {e}")
+    
 app = Flask(__name__)
 app.secret_key = "super_secret_key_change_me" 
 
