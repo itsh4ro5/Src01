@@ -7,17 +7,28 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from pymongo import MongoClient
 from config import MONGO_DB, DB_NAME, OWNER_ID
 
-# 🟢 BOT KO BACKGROUND ME CHALANA + SARE ERRORS LOGS ME DIKHANA 🟢
-try:
-    print("🚀 Starting Main Bot Process in background...")
-    # sys.stdout aur sys.stderr use karne se bot ke saare errors Hugging Face terminal me aa jayenge
-    subprocess.Popen(
-        [sys.executable, "main.py"], 
-        stdout=sys.stdout, 
-        stderr=sys.stderr
-    )
-except Exception as e:
-    print(f"⚠️ Failed to start bot in background: {e}")
+# 🟢 100% BULLETPROOF BOT STARTER 🟢
+# Ye check karega ki bot pehle se start toh nahi ho gaya, taaki Database lock error na aaye!
+LOCK_FILE = "/tmp/bot_running.lock"
+
+if not os.path.exists(LOCK_FILE):
+    try:
+        # Lock file banao taaki dusra process bot start na kare
+        with open(LOCK_FILE, "w") as f:
+            f.write("running")
+            
+        print("🚀 Starting Main Bot Process in background...")
+        # FIX: 'python' ki jagah sys.executable use kiya, aur errors ko terminal me bheja
+        subprocess.Popen(
+            [sys.executable, "main.py"], 
+            stdout=sys.stdout, 
+            stderr=sys.stderr
+        )
+    except Exception as e:
+        print(f"⚠️ Failed to start bot: {e}")
+        # Agar start me fail ho, toh lock hata do
+        if os.path.exists(LOCK_FILE):
+            os.remove(LOCK_FILE)
 
 app = Flask(__name__)
 app.secret_key = "super_secret_key_change_me" 
