@@ -1,16 +1,24 @@
 import os
+import sys
 import json
+import subprocess
+from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from pymongo import MongoClient
 from config import MONGO_DB, DB_NAME, OWNER_ID
-from datetime import datetime, timedelta
 
+# 🟢 BOT KO BACKGROUND ME CHALANA + SARE ERRORS LOGS ME DIKHANA 🟢
 try:
-    subprocess.Popen(["python", "main.py"])
-    print("🤖 Main Bot Process Started in Background!")
+    print("🚀 Starting Main Bot Process in background...")
+    # sys.stdout aur sys.stderr use karne se bot ke saare errors Hugging Face terminal me aa jayenge
+    subprocess.Popen(
+        [sys.executable, "main.py"], 
+        stdout=sys.stdout, 
+        stderr=sys.stderr
+    )
 except Exception as e:
-    print(f"Failed to start bot: {e}")
-    
+    print(f"⚠️ Failed to start bot in background: {e}")
+
 app = Flask(__name__)
 app.secret_key = "super_secret_key_change_me" 
 
@@ -25,7 +33,7 @@ try:
 except Exception as e:
     print(f"Database connection error: {e}")
 
-# 🟢 NEW: Direct JSON Reader function to avoid Pyrogram asyncio threading errors
+# Safe function to read live tasks without crashing Pyrogram
 def get_active_task(user_id):
     try:
         if os.path.exists("active_users.json"):
@@ -53,7 +61,7 @@ def login():
                 session["admin_id"] = tg_id
                 session["admin_name"] = admin.get("admin_name", "Admin")
                 
-                # RBAC Logic
+                # Role Based Access Control
                 if tg_id in OWNER_ID:
                     session["role"] = "owner"
                 else:
@@ -93,7 +101,7 @@ def dashboard():
                                is_owner=is_owner)
     else:
         # ADMIN VIEW
-        current_task = get_active_task(admin_id) # 🟢 Using new safe function
+        current_task = get_active_task(admin_id)
             
         logs = list(admin_logs.find({"admin_id": admin_id}).sort("timestamp", -1).limit(50))
         view_type = f"Personal Dashboard ({session['admin_name']})"
@@ -119,12 +127,12 @@ def user_details(user_id):
         return redirect(url_for("dashboard"))
 
     user_info = premium_col.find_one({"user_id": user_id})
-    active_task = get_active_task(user_id) # 🟢 Using new safe function
+    active_task = get_active_task(user_id)
         
     user_logs = list(admin_logs.find({"admin_id": user_id}).sort("timestamp", -1).limit(20))
     return render_template("user_profile.html", user=user_info, task=active_task, logs=user_logs)
 
-# --- NAYA FEATURE: ADD USER VIA WEB ---
+# --- ADD USER VIA WEB ---
 @app.route("/admin/add_user", methods=["POST"])
 def web_add_user():
     if session.get("role") != "owner":
@@ -144,14 +152,12 @@ def web_add_user():
         elif unit == "year": exp = now + timedelta(days=365 * val)
         else: exp = now + timedelta(days=val)
 
-        # Database update
         premium_col.update_one(
             {"user_id": tg_id},
             {"$set": {"user_id": tg_id, "subscription_start": now, "subscription_end": exp, "expireAt": exp}},
             upsert=True
         )
 
-        # Admin log me save karna
         admin_logs.insert_one({
             "admin_id": session["admin_id"],
             "admin_name": session.get("admin_name", "Boss"),
@@ -165,17 +171,15 @@ def web_add_user():
 
     return redirect(url_for("list_premium_users"))
 
-# --- NAYA FEATURE: REMOVE USER VIA WEB ---
+# --- REMOVE USER VIA WEB ---
 @app.route("/admin/remove_user/<int:tg_id>")
 def web_remove_user(tg_id):
     if session.get("role") != "owner":
         return redirect(url_for("dashboard"))
 
-    # Premium se hatana aur web password delete karna
     premium_col.delete_one({"user_id": tg_id})
     admin_auth.delete_one({"admin_id": tg_id}) 
 
-    # Admin log me save karna
     admin_logs.insert_one({
         "admin_id": session["admin_id"],
         "admin_name": session.get("admin_name", "Boss"),
@@ -183,10 +187,10 @@ def web_remove_user(tg_id):
         "target": str(tg_id),
         "timestamp": datetime.now()
     })
-    flash(f"User {tg_id} has been removed and banned from web panel.", "error")
+    flash(f"User {tg_id} has been removed and banned.", "error")
     return redirect(url_for("list_premium_users"))
 
-# --- NAYA FEATURE: CLEAR HISTORY (LOGS) ---
+# --- CLEAR LOGS HISTORY ---
 @app.route("/clear_logs")
 def clear_logs():
     if "admin_id" not in session:
@@ -197,17 +201,15 @@ def clear_logs():
     
     try:
         if is_owner:
-            # Boss clears ALL logs (Database space saved!)
             admin_logs.delete_many({})
             flash("All global logs have been cleared successfully! Space saved.", "success")
         else:
-            # Premium User clears ONLY their own logs
             admin_logs.delete_many({"admin_id": admin_id})
             flash("Your history has been cleared successfully!", "success")
     except Exception as e:
         flash(f"Error clearing logs: {e}", "error")
         
-    return redirect(url_for("dashboard"))    
+    return redirect(url_for("dashboard"))
 
 @app.route("/logout")
 def logout():
