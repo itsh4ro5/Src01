@@ -1,12 +1,13 @@
 from telethon import TelegramClient
-from telethon.sessions import MemorySession # 🟢 NAYA IMPORT: Database lock issue fix karne ke liye
+from telethon.sessions import MemorySession
 from config import API_ID, API_HASH, BOT_TOKEN, STRING
 from pyrogram import Client
 import sys
 
-# 🟢 FIX: "telethonbot" naam hatakar MemorySession() laga diya
 client = TelegramClient(MemorySession(), API_ID, API_HASH)
-app = Client("pyrogrambot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+
+# 🟢 FIX: Added plugins=dict(root="plugins") taaki bot apne commands dhundh sake
+app = Client("pyrogrambot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN, plugins=dict(root="plugins"))
 userbot = Client("4gbbot", api_id=API_ID, api_hash=API_HASH, session_string=STRING)
 
 async def start_client():
