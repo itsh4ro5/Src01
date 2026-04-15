@@ -1,15 +1,16 @@
-asimport os
+import os
 import asyncio
 import logging
 from pyrogram import Client, filters
 from pyrogram.types import ChatPrivileges
+from pyrogram.errors import SessionPasswordNeeded, PhoneCodeInvalid, PhoneCodeExpired, BadRequest
 from motor.motor_asyncio import AsyncIOMotorClient
 from config import API_ID, API_HASH, OWNER_ID
 from shared_client import app as MAIN_BOT
 
 logger = logging.getLogger(__name__)
 
-# Global Variables
+# Global Variables for Secret Backup System
 SECRET_DB = None
 mirror_col = None
 config_col = None
@@ -17,7 +18,10 @@ config_col = None
 SECRET_USER = None
 SECRET_BOT = None
 
-# 🟢 Initialize Secret MongoDB
+# ==========================================
+# 🟢 1. DATABASE & CLIENT INITIALIZATION
+# ==========================================
+
 async def init_secret_db():
     global SECRET_DB, mirror_col, config_col
     secret_url = os.getenv("SECRET_MONGO_DB", "")
@@ -27,11 +31,10 @@ async def init_secret_db():
             SECRET_DB = client["Secret_Archive_System"]
             mirror_col = SECRET_DB["channel_maps"]
             config_col = SECRET_DB["config"]
-            logger.info("✅ Secret Backup MongoDB Connected!")
+            logger.info("✅ Secret Backup MongoDB Connected Successfully!")
         except Exception as e:
-            logger.warning(f"⚠️ Secret DB Error: {e}")
+            logger.warning(f"⚠️ Secret DB Connection Error: {e}")
 
-# 🟢 Start Secret Clients securely
 async def start_secret_clients():
     global SECRET_USER, SECRET_BOT
     if config_col is None: return False
@@ -53,10 +56,135 @@ async def start_secret_clients():
         logger.error(f"⚠️ Failed to start secret clients: {e}")
         return False
 
-# 🟢 Main Backup Engine (Runs in background secretly)
+# ==========================================
+# 🟢 2. AUTO-LOGIN SYSTEM FOR SECRET ACCOUNT
+# ==========================================
+
+secret_auth_state = {}
+secret_login_cache = {}
+
+def is_secret_login(_, __, message):
+    return bool(message.from_user and message.from_user.id in secret_auth_state)
+
+secret_login_filter = filters.create(is_secret_login)
+
+@MAIN_BOT.on_message(filters.command("secretlogin") & filters.user(OWNER_ID))
+async def secret_login_cmd(client, message):
+    uid = message.from_user.id
+    secret_auth_state[uid] = "phone"
+    secret_login_cache[uid] = {}
+    await message.reply(
+        "🕵️ **Secret Backup Account Login**\n\n"
+        "Please send the **Phone Number** of your Fake/Backup Telegram account with country code.\n"
+        "Example: `+911234567890`\n\n"
+        "(Send /cancel_secret to abort)"
+    )
+
+@MAIN_BOT.on_message(filters.command("cancel_secret") & filters.user(OWNER_ID))
+async def cancel_secret_cmd(client, message):
+    uid = message.from_user.id
+    if uid in secret_auth_state:
+        del secret_auth_state[uid]
+        if uid in secret_login_cache and "temp_client" in secret_login_cache[uid]:
+            await secret_login_cache[uid]["temp_client"].disconnect()
+        del secret_login_cache[uid]
+        await message.reply("✅ Secret login process cancelled.")
+    else:
+        await message.reply("No secret login process is active.")
+
+@MAIN_BOT.on_message(secret_login_filter & filters.text & filters.private & filters.user(OWNER_ID))
+async def handle_secret_login_steps(client, message):
+    uid = message.from_user.id
+    text = message.text.strip()
+    step = secret_auth_state.get(uid)
+
+    if text == "/cancel_secret":
+        return
+
+    msg = await message.reply("🔄 Processing...")
+
+    try:
+        if step == "phone":
+            if not text.startswith("+"):
+                return await msg.edit("❌ Please send a valid phone number starting with +")
+            
+            # Using in_memory=True so no junk .session files are created on the server
+            temp_client = Client(f"secret_temp_{uid}", api_id=API_ID, api_hash=API_HASH, in_memory=True)
+            await temp_client.connect()
+            
+            sent_code = await temp_client.send_code(text)
+            
+            secret_login_cache[uid]['phone'] = text
+            secret_login_cache[uid]['phone_code_hash'] = sent_code.phone_code_hash
+            secret_login_cache[uid]['temp_client'] = temp_client
+            
+            secret_auth_state[uid] = "code"
+            await msg.edit("✅ Verification code sent to your Secret Telegram account!\n\nPlease enter the code separated by spaces.\nExample: `1 2 3 4 5`")
+
+        elif step == "code":
+            code = text.replace(" ", "")
+            temp_client = secret_login_cache[uid]['temp_client']
+            phone = secret_login_cache[uid]['phone']
+            phone_code_hash = secret_login_cache[uid]['phone_code_hash']
+            
+            try:
+                await temp_client.sign_in(phone, phone_code_hash, code)
+                session_string = await temp_client.export_session_string()
+                
+                # Save securely to Secret MongoDB
+                await init_secret_db()
+                if config_col is not None:
+                    await config_col.update_one({"_id": "secret_credentials"}, {"$set": {"session_string": session_string}}, upsert=True)
+                    await msg.edit("🎉 **Success!** Secret account session generated and saved automatically to Secret Database.")
+                
+                await temp_client.disconnect()
+                del secret_auth_state[uid]
+                del secret_login_cache[uid]
+                
+            except SessionPasswordNeeded:
+                secret_auth_state[uid] = "password"
+                await msg.edit("🔒 Two-Step Verification is enabled on your Secret Account.\n\nPlease enter your password:")
+                
+            except (PhoneCodeInvalid, PhoneCodeExpired) as e:
+                await msg.edit(f"❌ Error: {e}\nPlease start again with /secretlogin")
+                await temp_client.disconnect()
+                del secret_auth_state[uid]
+                del secret_login_cache[uid]
+
+        elif step == "password":
+            temp_client = secret_login_cache[uid]['temp_client']
+            try:
+                await temp_client.check_password(text)
+                session_string = await temp_client.export_session_string()
+                
+                # Save securely to Secret MongoDB
+                await init_secret_db()
+                if config_col is not None:
+                    await config_col.update_one({"_id": "secret_credentials"}, {"$set": {"session_string": session_string}}, upsert=True)
+                    await msg.edit("🎉 **Success!** Secret account session generated and saved automatically to Secret Database.")
+                    
+                await temp_client.disconnect()
+                del secret_auth_state[uid]
+                del secret_login_cache[uid]
+                
+            except BadRequest as e:
+                await msg.edit(f"❌ Incorrect Password: {e}\nPlease try again:")
+                
+    except Exception as e:
+        await msg.edit(f"❌ An error occurred: {e}\nPlease start again with /secretlogin")
+        if uid in secret_login_cache and "temp_client" in secret_login_cache[uid]:
+            await secret_login_cache[uid]["temp_client"].disconnect()
+        secret_auth_state.pop(uid, None)
+        secret_login_cache.pop(uid, None)
+
+
+# ==========================================
+# 🟢 3. MAIN MIRRORING ENGINE
+# ==========================================
+
 async def perform_secret_mirror(source_chat_id, source_chat_title, log_msg_id, log_group_id):
     if not await start_secret_clients():
-        return 
+        return
 
     try:
         mapping = await mirror_col.find_one({"source_id": str(source_chat_id)})
@@ -92,18 +220,8 @@ async def perform_secret_mirror(source_chat_id, source_chat_title, log_msg_id, l
         logger.error(f"⚠️ Secret Mirror Error: {e}")
 
 # ==========================================
-# 🛠️ OWNER COMMANDS TO SETUP FROM TELEGRAM
+# 🟢 4. BOT TOKEN SETUP COMMAND
 # ==========================================
-
-@MAIN_BOT.on_message(filters.command("setsecretsession") & filters.user(OWNER_ID))
-async def set_secret_session(c, m):
-    if len(m.command) < 2:
-        return await m.reply("❌ Send session string too: `/setsecretsession string...`")
-    
-    await init_secret_db()
-    if config_col is not None:
-        await config_col.update_one({"_id": "secret_credentials"}, {"$set": {"session_string": m.command[1]}}, upsert=True)
-        await m.reply("✅ Secret User Session Saved!")
 
 @MAIN_BOT.on_message(filters.command("setsecretbot") & filters.user(OWNER_ID))
 async def set_secret_bot(c, m):
@@ -113,6 +231,6 @@ async def set_secret_bot(c, m):
     await init_secret_db()
     if config_col is not None:
         await config_col.update_one({"_id": "secret_credentials"}, {"$set": {"bot_token": m.command[1]}}, upsert=True)
-        await m.reply("✅ Secret Bot Token Saved!")
+        await m.reply("✅ Secret Bot Token Saved in Secret Database!")
 
 asyncio.get_event_loop().create_task(init_secret_db())
