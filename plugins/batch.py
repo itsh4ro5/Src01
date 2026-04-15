@@ -1,8 +1,6 @@
-# Copyright (c) 2025 devgagan : https://github.com/devgaganin.  
-# Licensed under the GNU General Public License v3.0.  
-
 import os, re, time, asyncio, json, logging
 import random
+import aiofiles
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import UserNotParticipant, FloodWait
@@ -37,10 +35,11 @@ def load_active_users():
     except Exception:
         return {}
 
+# 🟢 FIX: Async File Saving to prevent blocking
 async def save_active_users_to_file():
     try:
-        with open(ACTIVE_USERS_FILE, 'w') as f:
-            json.dump(ACTIVE_USERS, f)
+        async with aiofiles.open(ACTIVE_USERS_FILE, 'w') as f:
+            await f.write(json.dumps(ACTIVE_USERS))
     except Exception as e:
         pass
 
@@ -175,12 +174,13 @@ async def get_uclient(uid):
             return ubot if ubot else Y
     return Y
 
+# 🟢 FIX: 10 Sec update limit & Safe Edit for Progress Bar
 async def prog(c, t, C, h, m, st):
     global LAST_UPDATE_TIME
     p = c / t * 100
     now = time.time()
     
-    if m not in LAST_UPDATE_TIME or (now - LAST_UPDATE_TIME.get(m, 0)) >= 5 or p >= 100:
+    if m not in LAST_UPDATE_TIME or (now - LAST_UPDATE_TIME.get(m, 0)) >= 10 or p >= 100:
         LAST_UPDATE_TIME[m] = now
         c_mb = c / (1024 * 1024)
         t_mb = t / (1024 * 1024)
@@ -190,10 +190,13 @@ async def prog(c, t, C, h, m, st):
         
         text = f"__**H4R SRC...**__\n\n{bar}\n\n⚡**__Completed__**: {c_mb:.2f} MB / {t_mb:.2f} MB\n📊 **__Done__**: {p:.2f}%\n🚀 **__Speed__**: {speed:.2f} MB/s\n⏳ **__ETA__**: {eta}\n\n**__Powered by H4R__**"
         
-        try:
-            asyncio.create_task(C.edit_message_text(h, m, text))
-        except Exception: 
-            pass
+        async def safe_edit():
+            try:
+                await C.edit_message_text(h, m, text)
+            except Exception:
+                pass
+                
+        asyncio.create_task(safe_edit())
             
         if p >= 100: 
             LAST_UPDATE_TIME.pop(m, None)
@@ -212,13 +215,18 @@ async def send_direct(c, m, tcid, ft=None, rtmid=None):
     except Exception as e:
         return False
 
+# 🟢 FIX: Safe status edit function to prevent bot from skipping files on FloodWait
+async def safe_status_edit(client, chat_id, msg_id, text):
+    try:
+        await client.edit_message_text(chat_id, msg_id, text)
+    except Exception:
+        pass
+
 async def process_msg(c, u, m, d, lt, uid, i, task=None):
     if isinstance(d, str):
         try: d = int(d)
         except Exception: pass
 
-    # tcid = File jahan jayegi (Destination Channel)
-    # uid  = Progress Bar jahan dikhega (Aapka Bot)
     tcid = d
     rtmid = None
     
@@ -252,7 +260,6 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 success = await send_direct(c, m, tcid, ft, rtmid)
                 if success: return 'Sent directly.'
             
-            # 🟢 FIX: Progress bar 'uid' (User Bot) mein bhejna
             p = await c.send_message(uid, '⏳ Initializing...')
             
             forward_mode = await get_user_data_key(uid, "forward_mode", False)
@@ -263,11 +270,11 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                     await c.delete_messages(uid, p.id)
                     return 'Fast Forwarded ✅'
                 except Exception as e:
-                    await c.edit_message_text(uid, p.id, f"⚠️ **Forward Error:** `{str(e)[:30]}`\n🔄 Downloading...")
+                    await safe_status_edit(c, uid, p.id, f"⚠️ **Forward Error:** `{str(e)[:30]}`\n🔄 Downloading...")
                     await asyncio.sleep(2)
             
             st = time.time()
-            await c.edit_message_text(uid, p.id, '⬇️ Downloading...')
+            await safe_status_edit(c, uid, p.id, '⬇️ Downloading...')
 
             c_name = f"{time.time()}"
             original_ext = ""
@@ -280,16 +287,15 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
     
             try:
                 client_to_use = getattr(m, '_client', u if u else c)
-                # 🟢 FIX: progress_args mein 'uid' pass karna
                 f = await client_to_use.download_media(m, file_name=c_name, progress=prog, progress_args=(c, uid, p.id, st))
             except Exception:
                 f = None
                 
             if not f:
-                await c.edit_message_text(uid, p.id, 'Failed.')
+                await safe_status_edit(c, uid, p.id, 'Failed.')
                 return 'Failed.'
             
-            await c.edit_message_text(uid, p.id, 'Renaming...')
+            await safe_status_edit(c, uid, p.id, 'Renaming...')
             
             if m.video or m.audio or m.document:
                 renamed_f = await rename_file(f, uid, p)
@@ -311,7 +317,7 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             
             if fsize > 2 and Y:
                 st = time.time()
-                await c.edit_message_text(uid, p.id, 'File is larger than 2GB. Using alternative method...')
+                await safe_status_edit(c, uid, p.id, 'File is larger than 2GB. Using alternative method...')
                 await upd_dlg(Y)
                 mtd = await get_video_metadata(f)
                 dur, h, w = mtd['duration'], mtd['width'], mtd['height']
@@ -331,11 +337,10 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 await c.delete_messages(uid, p.id)
                 return 'Done (Large file).'
             
-            await c.edit_message_text(uid, p.id, 'Uploading...')
+            await safe_status_edit(c, uid, p.id, 'Uploading...')
             st = time.time()
 
             try:
-                # 🟢 File 'tcid' (Destination) mein jayegi par Progress 'uid' (Bot) mein dikhega
                 if m.video or f.lower().endswith(('.mp4', '.mkv')):
                     mtd = await get_video_metadata(f)
                     await c.send_video(tcid, video=f, caption=ft if m.caption else None, thumb=th, width=mtd['width'], height=mtd['height'], duration=mtd['duration'], progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
@@ -344,7 +349,7 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 else:
                     await c.send_document(tcid, document=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
             except Exception as e:
-                await c.edit_message_text(uid, p.id, f'Upload failed: {str(e)[:30]}')
+                await safe_status_edit(c, uid, p.id, f'Upload failed: {str(e)[:30]}')
                 if os.path.exists(f): os.remove(f)
                 return 'Failed.'
             
@@ -423,7 +428,8 @@ async def text_handler(c, m):
                 await m.reply_text('❌ Invalid link format.')
                 return
             Z[uid] = {'step': 'count', 'cid': i, 'sid': d, 'lt': lt}
-            await m.reply_text('🔗 **Link Detected!**\n🔢 **Kitne messages nikalne hain?**\n👉 (Sirf 1 nikalna hai to `1` likhen, ya Batch ke liye total number bhejen)')
+            # 🟢 FIX: Naya Prompt for Ending Link
+            await m.reply_text('🔗 **Starting Link Detected!**\n\nAb aap 2 tarike se bata sakte hain:\n1️⃣ **Ending Link bhejen** (Jahan tak extract karna hai)\n👉 *Ya fir*\n2️⃣ **Number bhejen** (Kitne messages nikalne hain, ex: 50)')
             return
         else:
             return
@@ -442,7 +448,8 @@ async def text_handler(c, m):
             Z.pop(uid, None)
             return
         Z[uid].update({'step': 'count', 'cid': i, 'sid': d, 'lt': lt})
-        await m.reply_text('How many messages?')
+        # 🟢 FIX: Naya Prompt for Ending Link
+        await m.reply_text('✅ **Starting Link Saved!**\n\nAb aap 2 tarike se bata sakte hain:\n1️⃣ **Ending Link bhejen** (Jahan tak extract karna hai)\n👉 *Ya fir*\n2️⃣ **Number bhejen** (Kitne messages nikalne hain, ex: 50)')
 
     elif s == 'start_single':
         L = m.text
@@ -453,7 +460,7 @@ async def text_handler(c, m):
             return
 
         Z[uid].update({'step': 'process_single', 'cid': i, 'sid': d, 'lt': lt})
-        i, s, lt = Z[uid]['cid'], Z[uid]['sid'], Z[uid]['lt']
+        i, s_id, lt = Z[uid]['cid'], Z[uid]['sid'], Z[uid]['lt']
         pt = await m.reply_text('Processing...')
         
         ubot = UB.get(uid)
@@ -503,7 +510,7 @@ async def text_handler(c, m):
             except: 
                 dest_display = str(target_chat_id)
 
-            msg = await get_msg(ubot, uc, i, s, lt)
+            msg = await get_msg(ubot, uc, i, s_id, lt)
             if msg:
                 task_data = {"watermark": await get_user_data_key(uid, "watermark", "")}
                 res = await process_msg(ubot, uc, msg, target_chat_id, lt, uid, i, task=task_data)
@@ -518,21 +525,43 @@ async def text_handler(c, m):
             await pt.edit(f'Error: {str(e)[:50]}')
         finally:
             Z.pop(uid, None)
+            # 🟢 FIX: Memory Leak Prevention
+            if uid in UC:
+                try: await UC[uid].stop()
+                except: pass
+                UC.pop(uid, None)
 
     elif s == 'count':
-        if not m.text.isdigit():
-            await m.reply_text('Enter valid number.')
-            return
-        
-        count = int(m.text)
         maxlimit = PREMIUM_LIMIT if await is_premium_user(uid) else FREEMIUM_LIMIT
+        
+        # 🟢 FIX: Link and Number dono ko handle karne ka logic
+        if m.text.isdigit():
+            count = int(m.text)
+        else:
+            end_i, end_d, end_lt = E(m.text)
+            if not end_i or not end_d:
+                await m.reply_text('❌ Please enter a valid number or a valid Telegram ending link.')
+                return
+            
+            start_d = int(Z[uid]['sid'])
+            end_d = int(end_d)
+            
+            if str(end_i) != str(Z[uid]['cid']):
+                await m.reply_text('❌ Ending link usi channel/group ka hona chahiye jiska starting link tha!')
+                return
+                
+            if end_d < start_d:
+                await m.reply_text('❌ Ending message ID starting message ID se bada ya barabar hona chahiye!')
+                return
+                
+            count = (end_d - start_d) + 1
 
         if count > maxlimit:
-            await m.reply_text(f'Maximum limit is {maxlimit}.')
+            await m.reply_text(f'❌ Maximum limit is {maxlimit}. Aap {count} messages nikalne ki koshish kar rahe hain.')
             return
 
         Z[uid].update({'step': 'process', 'did': str(m.chat.id), 'num': count})
-        i, s, n, lt = Z[uid]['cid'], Z[uid]['sid'], Z[uid]['num'], Z[uid]['lt']
+        i, s_id, n, lt = Z[uid]['cid'], Z[uid]['sid'], Z[uid]['num'], Z[uid]['lt']
         success = 0
 
         pt = await m.reply_text('Processing batch...')
@@ -590,17 +619,17 @@ async def text_handler(c, m):
         try:
             for j in range(n):
                 while IS_PAUSED:
-                    try: await pt.edit('Taking a human-like break... Paused for ~20 mins.')
+                    try: await safe_status_edit(c, uid, pt.id, 'Taking a human-like break... Paused for ~20 mins.')
                     except: pass
                     await asyncio.sleep(random.uniform(55.5, 65.5))
                 
                 if should_cancel(uid):
-                    await pt.edit(f'Cancelled at {j}/{n}. Success: {success}')
+                    await safe_status_edit(c, uid, pt.id, f'Cancelled at {j}/{n}. Success: {success}')
                     break
                 
                 await update_batch_progress(uid, j, success)
                 
-                mid = int(s) + j
+                mid = int(s_id) + j
                 try:
                     msg = await get_msg(ubot, uc, i, mid, lt)
                     if msg:
@@ -610,21 +639,20 @@ async def text_handler(c, m):
                         if res and isinstance(res, str) and any(x in res for x in ['Done', 'Copied', 'Sent', 'Forwarded']):
                             success += 1
                     else:
-                        try: await pt.edit(f"⚠️ Skipped {mid}: Not found.")
+                        try: await safe_status_edit(c, uid, pt.id, f"⚠️ Skipped {mid}: Not found.")
                         except: pass
                 except Exception as e:
-                    try: await pt.edit(f'{j+1}/{n}: Error - {str(e)[:30]}')
+                    try: await safe_status_edit(c, uid, pt.id, f'{j+1}/{n}: Error - {str(e)[:30]}')
                     except: pass
                 
                 if n > 1:
                     if (j + 1) % 25 == 0:
-                        try: await pt.edit("⏳ Cooling down for 60 seconds to prevent FloodWait...")
+                        try: await safe_status_edit(c, uid, pt.id, "⏳ Cooling down for 60 seconds to prevent FloodWait...")
                         except: pass
                         await asyncio.sleep(60)
                     else:
-                        # 🟢 SPEED DELAY FIX: Delay bohut lamba tha, usko chota (2.5 - 4.5 seconds) kar diya hai
                         delay_time = random.uniform(2.5, 4.5)
-                        try: await pt.edit(f'Sleeping for {delay_time:.2f}s to act like human...')
+                        try: await safe_status_edit(c, uid, pt.id, f'Sleeping for {delay_time:.2f}s to act like human...')
                         except: pass
                         await asyncio.sleep(delay_time)
             
@@ -637,3 +665,8 @@ async def text_handler(c, m):
         finally:
             await remove_active_batch(uid)
             Z.pop(uid, None)
+            # 🟢 FIX: Memory Leak Prevention
+            if uid in UC:
+                try: await UC[uid].stop()
+                except: pass
+                UC.pop(uid, None)
