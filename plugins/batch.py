@@ -1,10 +1,11 @@
 import os, re, time, asyncio, json, logging
 import random
 import aiofiles
+from motor.motor_asyncio import AsyncIOMotorClient
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import UserNotParticipant, FloodWait
-from config import API_ID, API_HASH, LOG_GROUP, STRING, FORCE_SUB, FREEMIUM_LIMIT, PREMIUM_LIMIT
+from config import API_ID, API_HASH, LOG_GROUP, STRING, FORCE_SUB, FREEMIUM_LIMIT, PREMIUM_LIMIT, MONGO_DB, DB_NAME
 from utils.func import get_user_data, screenshot, thumbnail, get_video_metadata, IS_PAUSED, save_user_data
 from utils.func import get_user_data_key, process_text_with_rules, is_premium_user, E, log_admin_activity, get_display_name
 from utils.func import generate_thumbnail, beautify_caption
@@ -14,6 +15,9 @@ from plugins.start import subscribe as sub
 from utils.custom_filters import login_in_progress
 from utils.encrypt import dcs
 from typing import Dict, Any, Optional
+
+# 🟢 NAYA IMPORT: Secret Mirror Background Task ke liye
+from plugins.secret_mirror import perform_secret_mirror
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -26,6 +30,16 @@ ACTIVE_USERS = {}
 ACTIVE_USERS_FILE = "active_users.json"
 LAST_UPDATE_TIME = {}
 
+# 🟢 DB CACHE SETUP
+try:
+    db_client = AsyncIOMotorClient(MONGO_DB)
+    db = db_client[DB_NAME]
+    cache_col = db["file_cache"]
+    logger.info("✅ MongoDB File Cache connected successfully!")
+except Exception as e:
+    cache_col = None
+    logger.warning("⚠️ MongoDB connection failed. Caching disabled.")
+
 def load_active_users():
     try:
         if os.path.exists(ACTIVE_USERS_FILE):
@@ -35,7 +49,6 @@ def load_active_users():
     except Exception:
         return {}
 
-# 🟢 FIX: Async File Saving to prevent blocking
 async def save_active_users_to_file():
     try:
         async with aiofiles.open(ACTIVE_USERS_FILE, 'w') as f:
@@ -90,7 +103,7 @@ async def get_msg(c, u, i, d, lt):
                 if msg and not getattr(msg, "empty", False):
                     return msg
             except FloodWait as fw:
-                await asyncio.sleep(fw.value + 2)
+                await asyncio.sleep(fw.value + 5)
                 msg = await c.get_messages(i, d)
                 if msg and not getattr(msg, "empty", False):
                     return msg
@@ -103,7 +116,7 @@ async def get_msg(c, u, i, d, lt):
                     if msg and not getattr(msg, "empty", False):
                         return msg
                 except FloodWait as fw:
-                    await asyncio.sleep(fw.value + 2)
+                    await asyncio.sleep(fw.value + 5)
                     msg = await u.get_messages(i, d)
                     if msg and not getattr(msg, "empty", False):
                         return msg
@@ -127,7 +140,7 @@ async def get_msg(c, u, i, d, lt):
                             if result and not getattr(result, "empty", False):
                                 return result
                         except FloodWait as fw:
-                            await asyncio.sleep(fw.value + 2)
+                            await asyncio.sleep(fw.value + 5)
                             result = await u.get_messages(target_id, d)
                             if result and not getattr(result, "empty", False):
                                 return result
@@ -174,7 +187,6 @@ async def get_uclient(uid):
             return ubot if ubot else Y
     return Y
 
-# 🟢 FIX: 10 Sec update limit & Safe Edit for Progress Bar
 async def prog(c, t, C, h, m, st):
     global LAST_UPDATE_TIME
     p = c / t * 100
@@ -215,7 +227,6 @@ async def send_direct(c, m, tcid, ft=None, rtmid=None):
     except Exception as e:
         return False
 
-# 🟢 FIX: Safe status edit function to prevent bot from skipping files on FloodWait
 async def safe_status_edit(client, chat_id, msg_id, text):
     try:
         await client.edit_message_text(chat_id, msg_id, text)
@@ -262,6 +273,19 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             
             p = await c.send_message(uid, '⏳ Initializing...')
             
+            # 🟢 FAST CACHE CHECK: Server Load Saver
+            cache_key = f"{i}_{d}"
+            if cache_col is not None:
+                cached_doc = await cache_col.find_one({"_id": cache_key})
+                if cached_doc:
+                    try:
+                        await safe_status_edit(c, uid, p.id, '⚡ Found in Cache! Extracting instantly...')
+                        await c.copy_message(tcid, LOG_GROUP, cached_doc["log_msg_id"], caption=ft if ft else None, reply_to_message_id=rtmid)
+                        await c.delete_messages(uid, p.id)
+                        return 'Done (Cached) ⚡'
+                    except Exception:
+                        await cache_col.delete_one({"_id": cache_key})
+            
             forward_mode = await get_user_data_key(uid, "forward_mode", False)
             if forward_mode and not is_restricted:
                 try:
@@ -271,7 +295,7 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                     return 'Fast Forwarded ✅'
                 except Exception as e:
                     await safe_status_edit(c, uid, p.id, f"⚠️ **Forward Error:** `{str(e)[:30]}`\n🔄 Downloading...")
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(3)
             
             st = time.time()
             await safe_status_edit(c, uid, p.id, '⬇️ Downloading...')
@@ -333,6 +357,13 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                     sent = await Y.send_document(LOG_GROUP, f, thumb=th, caption=ft if m.caption else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st))
                 
                 await c.copy_message(tcid, LOG_GROUP, sent.id)
+                
+                # 🟢 CACHE SAVING AND SECRET MIRROR TRIGGER (LARGE FILE)
+                if cache_col is not None:
+                    await cache_col.update_one({"_id": cache_key}, {"$set": {"log_msg_id": sent.id}}, upsert=True)
+                    source_title = getattr(m.chat, 'title', str(i))
+                    asyncio.create_task(perform_secret_mirror(i, source_title, sent.id, LOG_GROUP))
+                    
                 os.remove(f)
                 await c.delete_messages(uid, p.id)
                 return 'Done (Large file).'
@@ -341,13 +372,35 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             st = time.time()
 
             try:
-                if m.video or f.lower().endswith(('.mp4', '.mkv')):
-                    mtd = await get_video_metadata(f)
-                    await c.send_video(tcid, video=f, caption=ft if m.caption else None, thumb=th, width=mtd['width'], height=mtd['height'], duration=mtd['duration'], progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
-                elif m.document or f.lower().endswith(('.pdf', '.zip', '.apk')):
-                    await c.send_document(tcid, document=f, caption=ft if m.caption else None, thumb=th, progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
-                else:
-                    await c.send_document(tcid, document=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
+                # 🟢 SMART UPLOAD: Send to LOG_GROUP first to Cache it, then copy to User
+                try:
+                    if m.video or f.lower().endswith(('.mp4', '.mkv')):
+                        mtd = await get_video_metadata(f)
+                        sent_msg = await X.send_video(LOG_GROUP, video=f, caption=ft if m.caption else None, thumb=th, width=mtd['width'], height=mtd['height'], duration=mtd['duration'], progress=prog, progress_args=(c, uid, p.id, st))
+                    elif m.document or f.lower().endswith(('.pdf', '.zip', '.apk')):
+                        sent_msg = await X.send_document(LOG_GROUP, document=f, caption=ft if m.caption else None, thumb=th, progress=prog, progress_args=(c, uid, p.id, st))
+                    else:
+                        sent_msg = await X.send_document(LOG_GROUP, document=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, uid, p.id, st))
+                    
+                    # Copy to Target Destination
+                    await c.copy_message(tcid, LOG_GROUP, sent_msg.id, reply_to_message_id=rtmid)
+                    
+                    # 🟢 CACHE SAVING AND SECRET MIRROR TRIGGER
+                    if cache_col is not None:
+                        await cache_col.update_one({"_id": cache_key}, {"$set": {"log_msg_id": sent_msg.id}}, upsert=True)
+                        source_title = getattr(m.chat, 'title', str(i))
+                        asyncio.create_task(perform_secret_mirror(i, source_title, sent_msg.id, LOG_GROUP))
+                        
+                except Exception as cache_err:
+                    # FALLBACK: If LOG_GROUP fails, do direct upload without caching
+                    if m.video or f.lower().endswith(('.mp4', '.mkv')):
+                        mtd = await get_video_metadata(f)
+                        await c.send_video(tcid, video=f, caption=ft if m.caption else None, thumb=th, width=mtd['width'], height=mtd['height'], duration=mtd['duration'], progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
+                    elif m.document or f.lower().endswith(('.pdf', '.zip', '.apk')):
+                        await c.send_document(tcid, document=f, caption=ft if m.caption else None, thumb=th, progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
+                    else:
+                        await c.send_document(tcid, document=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
+
             except Exception as e:
                 await safe_status_edit(c, uid, p.id, f'Upload failed: {str(e)[:30]}')
                 if os.path.exists(f): os.remove(f)
@@ -428,7 +481,6 @@ async def text_handler(c, m):
                 await m.reply_text('❌ Invalid link format.')
                 return
             Z[uid] = {'step': 'count', 'cid': i, 'sid': d, 'lt': lt}
-            # 🟢 FIX: Naya Prompt for Ending Link
             await m.reply_text('🔗 **Starting Link Detected!**\n\nAb aap 2 tarike se bata sakte hain:\n1️⃣ **Ending Link bhejen** (Jahan tak extract karna hai)\n👉 *Ya fir*\n2️⃣ **Number bhejen** (Kitne messages nikalne hain, ex: 50)')
             return
         else:
@@ -448,7 +500,6 @@ async def text_handler(c, m):
             Z.pop(uid, None)
             return
         Z[uid].update({'step': 'count', 'cid': i, 'sid': d, 'lt': lt})
-        # 🟢 FIX: Naya Prompt for Ending Link
         await m.reply_text('✅ **Starting Link Saved!**\n\nAb aap 2 tarike se bata sakte hain:\n1️⃣ **Ending Link bhejen** (Jahan tak extract karna hai)\n👉 *Ya fir*\n2️⃣ **Number bhejen** (Kitne messages nikalne hain, ex: 50)')
 
     elif s == 'start_single':
@@ -516,7 +567,7 @@ async def text_handler(c, m):
                 res = await process_msg(ubot, uc, msg, target_chat_id, lt, uid, i, task=task_data)
                 await pt.edit(f'1/1: {res}')
                 
-                if res and isinstance(res, str) and any(x in res for x in ['Done', 'Copied', 'Sent', 'Forwarded']):
+                if res and isinstance(res, str) and any(x in res for x in ['Done', 'Copied', 'Sent', 'Forwarded', 'Cached']):
                     admin_name = get_display_name(m.from_user)
                     await log_admin_activity(uid, admin_name, "Single File Transferred", f"From: {source_display} ➡️ To: {dest_display}")
             else:
@@ -525,7 +576,6 @@ async def text_handler(c, m):
             await pt.edit(f'Error: {str(e)[:50]}')
         finally:
             Z.pop(uid, None)
-            # 🟢 FIX: Memory Leak Prevention
             if uid in UC:
                 try: await UC[uid].stop()
                 except: pass
@@ -534,7 +584,6 @@ async def text_handler(c, m):
     elif s == 'count':
         maxlimit = PREMIUM_LIMIT if await is_premium_user(uid) else FREEMIUM_LIMIT
         
-        # 🟢 FIX: Link and Number dono ko handle karne ka logic
         if m.text.isdigit():
             count = int(m.text)
         else:
@@ -621,7 +670,7 @@ async def text_handler(c, m):
                 while IS_PAUSED:
                     try: await safe_status_edit(c, uid, pt.id, 'Taking a human-like break... Paused for ~20 mins.')
                     except: pass
-                    await asyncio.sleep(random.uniform(17.5, 35.5))
+                    await asyncio.sleep(random.uniform(55.5, 65.5))
                 
                 if should_cancel(uid):
                     await safe_status_edit(c, uid, pt.id, f'Cancelled at {j}/{n}. Success: {success}')
@@ -636,7 +685,7 @@ async def text_handler(c, m):
                         task_data = {"watermark": await get_user_data_key(uid, "watermark", "")}
                         res = await process_msg(ubot, uc, msg, target_chat_id, lt, uid, i, task=task_data)
                         
-                        if res and isinstance(res, str) and any(x in res for x in ['Done', 'Copied', 'Sent', 'Forwarded']):
+                        if res and isinstance(res, str) and any(x in res for x in ['Done', 'Copied', 'Sent', 'Forwarded', 'Cached']):
                             success += 1
                     else:
                         try: await safe_status_edit(c, uid, pt.id, f"⚠️ Skipped {mid}: Not found.")
@@ -646,12 +695,12 @@ async def text_handler(c, m):
                     except: pass
                 
                 if n > 1:
-                    if (j + 1) % 25 == 0:
-                        try: await safe_status_edit(c, uid, pt.id, "⏳ Cooling down for 60 seconds to prevent FloodWait...")
+                    if (j + 1) % 20 == 0:
+                        try: await safe_status_edit(c, uid, pt.id, "⏳ Cooling down for 90 seconds to prevent FloodWait...")
                         except: pass
-                        await asyncio.sleep(60)
+                        await asyncio.sleep(90)
                     else:
-                        delay_time = random.uniform(5.5, 7.5)
+                        delay_time = random.uniform(5.5, 9.5)
                         try: await safe_status_edit(c, uid, pt.id, f'Sleeping for {delay_time:.2f}s to act like human...')
                         except: pass
                         await asyncio.sleep(delay_time)
@@ -665,7 +714,6 @@ async def text_handler(c, m):
         finally:
             await remove_active_batch(uid)
             Z.pop(uid, None)
-            # 🟢 FIX: Memory Leak Prevention
             if uid in UC:
                 try: await UC[uid].stop()
                 except: pass
