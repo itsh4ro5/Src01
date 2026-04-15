@@ -19,6 +19,9 @@ from typing import Dict, Any, Optional
 # 🟢 NAYA IMPORT: Secret Mirror Background Task ke liye
 from plugins.secret_mirror import perform_secret_mirror
 
+# Ye line aapke platform ke secrets se channel ID fetch kar legi
+LOG_CHANNEL_ID = int(os.environ.get("LOG_CHANNEL_ID", 0))
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 logging.getLogger("pyrogram.session.session").setLevel(logging.ERROR)
