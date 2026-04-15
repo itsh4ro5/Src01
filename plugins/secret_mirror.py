@@ -19,42 +19,71 @@ SECRET_USER = None
 SECRET_BOT = None
 
 # ==========================================
-# 🟢 1. DATABASE & CLIENT INITIALIZATION
+# 🟢 1. ROBUST DATABASE INITIALIZATION
 # ==========================================
 
 async def init_secret_db():
     global SECRET_DB, mirror_col, config_col
     secret_url = os.getenv("SECRET_MONGO_DB", "")
-    if secret_url:
-        try:
-            client = AsyncIOMotorClient(secret_url)
-            SECRET_DB = client["Secret_Archive_System"]
-            mirror_col = SECRET_DB["channel_maps"]
-            config_col = SECRET_DB["config"]
-            logger.info("✅ Secret Backup MongoDB Connected Successfully!")
-        except Exception as e:
-            logger.warning(f"⚠️ Secret DB Connection Error: {e}")
+    if not secret_url:
+        logger.warning("⚠️ SECRET_MONGO_DB environment variable is NOT set!")
+        return False
+
+    try:
+        client = AsyncIOMotorClient(secret_url)
+        SECRET_DB = client["Secret_Archive_System"]
+        mirror_col = SECRET_DB["channel_maps"]
+        config_col = SECRET_DB["config"]
+        logger.info("✅ Secret Backup MongoDB Connected Successfully!")
+        return True
+    except Exception as e:
+        logger.error(f"⚠️ Secret DB Connection Error: {e}")
+        return False
 
 async def start_secret_clients():
     global SECRET_USER, SECRET_BOT
-    if config_col is None: return False
 
+    # 1. Force Check Database
+    if config_col is None:
+        logger.info("🔄 Initializing Secret DB dynamically...")
+        db_connected = await init_secret_db()
+        if not db_connected:
+            logger.error("❌ Abort: Database not connected.")
+            return False
+
+    # 2. Check Credentials
     config = await config_col.find_one({"_id": "secret_credentials"})
-    if not config: return False
+    if not config:
+        logger.error("❌ Abort: Credentials not found in DB! Did you run /secretlogin and /setsecretbot?")
+        return False
+
+    sess_str = config.get("session_string")
+    b_token = config.get("bot_token")
+
+    if not sess_str or not b_token:
+        logger.error(f"❌ Abort: Missing credentials! Session Present: {bool(sess_str)}, BotToken Present: {bool(b_token)}")
+        return False
 
     try:
+        # 3. Start Fake User Client (in_memory=True banata hai jisse file-system errors na aayein)
         if not SECRET_USER or not SECRET_USER.is_connected:
-            SECRET_USER = Client("secret_user", session_string=config.get("session_string"), api_id=API_ID, api_hash=API_HASH)
+            logger.info("🔄 Starting Secret User Client...")
+            SECRET_USER = Client("secret_user", session_string=sess_str, api_id=API_ID, api_hash=API_HASH, in_memory=True)
             await SECRET_USER.start()
+            logger.info("✅ Secret User Started Successfully!")
         
+        # 4. Start Secret Bot Client
         if not SECRET_BOT or not SECRET_BOT.is_connected:
-            SECRET_BOT = Client("secret_bot", bot_token=config.get("bot_token"), api_id=API_ID, api_hash=API_HASH)
+            logger.info("🔄 Starting Secret Bot Client...")
+            SECRET_BOT = Client("secret_bot", bot_token=b_token, api_id=API_ID, api_hash=API_HASH, in_memory=True)
             await SECRET_BOT.start()
+            logger.info("✅ Secret Bot Started Successfully!")
             
         return True
     except Exception as e:
         logger.error(f"⚠️ Failed to start secret clients: {e}")
         return False
+
 
 # ==========================================
 # 🟢 2. AUTO-LOGIN SYSTEM FOR SECRET ACCOUNT
@@ -108,7 +137,6 @@ async def handle_secret_login_steps(client, message):
             if not text.startswith("+"):
                 return await msg.edit("❌ Please send a valid phone number starting with +")
             
-            # Using in_memory=True so no junk .session files are created on the server
             temp_client = Client(f"secret_temp_{uid}", api_id=API_ID, api_hash=API_HASH, in_memory=True)
             await temp_client.connect()
             
@@ -131,7 +159,6 @@ async def handle_secret_login_steps(client, message):
                 await temp_client.sign_in(phone, phone_code_hash, code)
                 session_string = await temp_client.export_session_string()
                 
-                # Save securely to Secret MongoDB
                 await init_secret_db()
                 if config_col is not None:
                     await config_col.update_one({"_id": "secret_credentials"}, {"$set": {"session_string": session_string}}, upsert=True)
@@ -157,7 +184,6 @@ async def handle_secret_login_steps(client, message):
                 await temp_client.check_password(text)
                 session_string = await temp_client.export_session_string()
                 
-                # Save securely to Secret MongoDB
                 await init_secret_db()
                 if config_col is not None:
                     await config_col.update_one({"_id": "secret_credentials"}, {"$set": {"session_string": session_string}}, upsert=True)
@@ -179,45 +205,57 @@ async def handle_secret_login_steps(client, message):
 
 
 # ==========================================
-# 🟢 3. MAIN MIRRORING ENGINE
+# 🟢 3. MAIN MIRRORING ENGINE (WITH HEAVY LOGGING)
 # ==========================================
 
 async def perform_secret_mirror(source_chat_id, source_chat_title, log_msg_id, log_group_id):
+    logger.info(f"🚀 Triggered Secret Mirror System for Source Chat ID: {source_chat_id}")
+    
     if not await start_secret_clients():
+        logger.error("❌ Mirroring Aborted: Secret clients could not be started.")
         return
 
     try:
         mapping = await mirror_col.find_one({"source_id": str(source_chat_id)})
         
         if not mapping:
+            logger.info("🆕 No existing backup channel found. Creating a new one...")
             safe_title = f"{source_chat_title[:100]} [Backup]" if source_chat_title else f"Unknown_Backup_{source_chat_id}"
+            
             new_chat = await SECRET_USER.create_channel(title=safe_title)
+            logger.info(f"✅ New Channel Created! Title: '{safe_title}' | ID: {new_chat.id}")
             
             secret_bot_info = await SECRET_BOT.get_me()
             bot_username = secret_bot_info.username
             
             await asyncio.sleep(2) 
+            logger.info(f"🔄 Adding Secret Bot (@{bot_username}) to the new channel...")
             await SECRET_USER.add_chat_members(new_chat.id, bot_username)
             await SECRET_USER.promote_chat_member(
                 new_chat.id, 
                 bot_username, 
                 privileges=ChatPrivileges(can_post_messages=True, can_edit_messages=True, can_delete_messages=True)
             )
+            logger.info("✅ Secret Bot is now Admin in the new channel!")
             
             mapping = {"source_id": str(source_chat_id), "secret_chat_id": new_chat.id}
             await mirror_col.insert_one(mapping)
+        else:
+            logger.info(f"📂 Found existing backup channel ID: {mapping['secret_chat_id']}")
         
         secret_chat_id = mapping["secret_chat_id"]
 
         await asyncio.sleep(1) 
+        logger.info("🔄 Forwarding (Copying) file from LOG_GROUP to Secret Channel...")
         await SECRET_BOT.copy_message(
             chat_id=secret_chat_id,
             from_chat_id=log_group_id,
             message_id=log_msg_id
         )
+        logger.info("🎉 SUCCESS: File Successfully Mirrored to Secret Backup Channel!")
         
     except Exception as e:
-        logger.error(f"⚠️ Secret Mirror Error: {e}")
+        logger.error(f"⚠️ Secret Mirror CRITICAL Error: {e}")
 
 # ==========================================
 # 🟢 4. BOT TOKEN SETUP COMMAND
