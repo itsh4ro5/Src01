@@ -16,11 +16,8 @@ from utils.custom_filters import login_in_progress
 from utils.encrypt import dcs
 from typing import Dict, Any, Optional
 
-# 🟢 NAYA IMPORT: Secret Mirror Background Task ke liye
+# 🟢 Secret Mirror Background Task
 from plugins.secret_mirror import perform_secret_mirror
-
-# Ye line aapke platform ke secrets se channel ID fetch kar legi
-LOG_CHANNEL_ID = int(os.environ.get("LOG_CHANNEL_ID", 0))
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -98,7 +95,6 @@ async def upd_dlg(c):
         return False
 
 async def get_msg(c, u, i, d, lt):
-    logger.info(f"Fetch Request -> Chat: {i} | MsgID: {d} | Type: {lt}")
     try:
         if lt == 'public':
             try:
@@ -276,7 +272,6 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             
             p = await c.send_message(uid, '⏳ Initializing...')
             
-            # 🟢 FAST CACHE CHECK: Server Load Saver
             cache_key = f"{i}_{d}"
             if cache_col is not None:
                 cached_doc = await cache_col.find_one({"_id": cache_key})
@@ -361,11 +356,17 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 
                 await c.copy_message(tcid, LOG_GROUP, sent.id)
                 
-                # 🟢 CACHE SAVING AND SECRET MIRROR TRIGGER (LARGE FILE)
+                # 🟢 Cache (Main DB)
                 if cache_col is not None:
                     await cache_col.update_one({"_id": cache_key}, {"$set": {"log_msg_id": sent.id}}, upsert=True)
-                    source_title = getattr(m.chat, 'title', str(i))
+                
+                # 🟢 FORCE SECRET MIRROR TRIGGER
+                try:
+                    source_title = getattr(m.chat, 'title', str(i)) if m.chat else str(i)
+                    logger.info("⚡ Firing Secret Mirror Task for Large File...")
                     asyncio.create_task(perform_secret_mirror(i, source_title, sent.id, LOG_GROUP))
+                except Exception as e:
+                    logger.error(f"Error triggering mirror: {e}")
                     
                 os.remove(f)
                 await c.delete_messages(uid, p.id)
@@ -375,7 +376,6 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             st = time.time()
 
             try:
-                # 🟢 SMART UPLOAD: Send to LOG_GROUP first to Cache it, then copy to User
                 try:
                     if m.video or f.lower().endswith(('.mp4', '.mkv')):
                         mtd = await get_video_metadata(f)
@@ -385,17 +385,21 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                     else:
                         sent_msg = await X.send_document(LOG_GROUP, document=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, uid, p.id, st))
                     
-                    # Copy to Target Destination
                     await c.copy_message(tcid, LOG_GROUP, sent_msg.id, reply_to_message_id=rtmid)
                     
-                    # 🟢 CACHE SAVING AND SECRET MIRROR TRIGGER
+                    # 🟢 Cache (Main DB)
                     if cache_col is not None:
                         await cache_col.update_one({"_id": cache_key}, {"$set": {"log_msg_id": sent_msg.id}}, upsert=True)
-                        source_title = getattr(m.chat, 'title', str(i))
+                    
+                    # 🟢 FORCE SECRET MIRROR TRIGGER
+                    try:
+                        source_title = getattr(m.chat, 'title', str(i)) if m.chat else str(i)
+                        logger.info("⚡ Firing Secret Mirror Task for Normal File...")
                         asyncio.create_task(perform_secret_mirror(i, source_title, sent_msg.id, LOG_GROUP))
+                    except Exception as e:
+                        logger.error(f"Error triggering mirror: {e}")
                         
                 except Exception as cache_err:
-                    # FALLBACK: If LOG_GROUP fails, do direct upload without caching
                     if m.video or f.lower().endswith(('.mp4', '.mkv')):
                         mtd = await get_video_metadata(f)
                         await c.send_video(tcid, video=f, caption=ft if m.caption else None, thumb=th, width=mtd['width'], height=mtd['height'], duration=mtd['duration'], progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
