@@ -3,7 +3,7 @@ import sys
 import random
 import time
 import asyncio
-import importlib
+from pyrogram import idle # 🟢 NAYA IMPORT: Bot ko zinda rakhne ke liye
 from pyrogram.types import BotCommand  
 
 try:
@@ -50,32 +50,19 @@ async def setup_bot_commands():
     except Exception as e:
         print(f"⚠️ Failed to set bot commands: {e}")
 
-async def load_and_run_plugins():
+async def main():
     try:
+        # Pyrogram automatically plugins load kar lega shared_client.py ki wajah se
         await start_client()
     except Exception as e:
         print(f"Error during client start: {e}")
         
-    plugin_dir = "plugins"
-    plugins = [f[:-3] for f in os.listdir(plugin_dir) if f.endswith(".py") and f != "__init__.py"]
-
-    for plugin in plugins:
-        try:
-            module = importlib.import_module(f"plugins.{plugin}")
-            if hasattr(module, f"run_{plugin}_plugin"):
-                print(f"Running {plugin} plugin...")
-                await getattr(module, f"run_{plugin}_plugin")()  
-        except Exception as e:
-            print(f"⚠️ Error loading plugin '{plugin}': {e}")
-
-async def main():
-    await load_and_run_plugins()
     await setup_bot_commands()  
     asyncio.create_task(human_behavior_routine())
     
-    # Keeps the asyncio loop alive
-    while True:
-        await asyncio.sleep(1)  
+    print("✅ Bot is fully active and listening to commands!")
+    # 🟢 FIX: Blocking while loop hatakar pyrogram ka idle lagaya
+    await idle()
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
