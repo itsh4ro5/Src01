@@ -180,7 +180,7 @@ async def prog(c, t, C, h, m, st):
     p = c / t * 100
     now = time.time()
     
-    if m not in LAST_UPDATE_TIME or (now - LAST_UPDATE_TIME.get(m, 0)) >= 10 or p >= 100:
+    if m not in LAST_UPDATE_TIME or (now - LAST_UPDATE_TIME.get(m, 0)) >= 15 or p >= 100:
         LAST_UPDATE_TIME[m] = now
         c_mb = c / (1024 * 1024)
         t_mb = t / (1024 * 1024)
@@ -621,7 +621,7 @@ async def text_handler(c, m):
                 while IS_PAUSED:
                     try: await safe_status_edit(c, uid, pt.id, 'Taking a human-like break... Paused for ~20 mins.')
                     except: pass
-                    await asyncio.sleep(random.uniform(55.5, 65.5))
+                    await asyncio.sleep(random.uniform(17.5, 35.5))
                 
                 if should_cancel(uid):
                     await safe_status_edit(c, uid, pt.id, f'Cancelled at {j}/{n}. Success: {success}')
@@ -651,7 +651,7 @@ async def text_handler(c, m):
                         except: pass
                         await asyncio.sleep(60)
                     else:
-                        delay_time = random.uniform(2.5, 4.5)
+                        delay_time = random.uniform(5.5, 7.5)
                         try: await safe_status_edit(c, uid, pt.id, f'Sleeping for {delay_time:.2f}s to act like human...')
                         except: pass
                         await asyncio.sleep(delay_time)
