@@ -3,10 +3,10 @@ import sys
 import random
 import time
 import asyncio
-from pyrogram import idle
+import importlib
 from pyrogram.types import BotCommand  
+from pyrogram import idle # 🟢 Bot ko background me jagaye rakhne ke liye
 
-# 🟢 1. UVLOOP & EVENT LOOP SETUP (SABSE PEHLE START HOGA TAURI CRASH NA HO)
 try:
     import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -16,7 +16,6 @@ try:
 except ImportError:
     print("⚠️ uvloop not installed. Standard asyncio will be used.")
 
-# 🟢 2. CLIENTS IMPORT (Loop banne ke baad import honge)
 from shared_client import start_client, app
 import utils.func as global_state
 
@@ -24,9 +23,11 @@ async def human_behavior_routine():
     while True:
         active_time = random.uniform(10500.5, 11000.2)
         await asyncio.sleep(active_time)
+        print("Taking a ~20-minute human-like break to prevent bans...")
         global_state.IS_PAUSED = True
         sleep_time = random.uniform(1150.7, 1250.3)
         await asyncio.sleep(sleep_time)
+        print("Waking up from break...")
         global_state.IS_PAUSED = False
 
 async def setup_bot_commands():
@@ -37,7 +38,12 @@ async def setup_bot_commands():
             BotCommand("logout", "Logout from your current session"),
             BotCommand("batch", "Extract multiple restricted messages"),
             BotCommand("single", "Extract a single restricted message"),
-            BotCommand("forward", "Toggle Fast Forward Mode"),
+            BotCommand("dl", "Download video from YouTube/Insta/etc"),
+            BotCommand("adl", "Download audio from YouTube/Insta/etc"),
+            BotCommand("forward", "Toggle Fast Forward Mode (No Download)"),
+            BotCommand("settings", "🎨 Settings & Customize Thumbnail"),
+            BotCommand("id", "🆔 Get Chat/User ID"),
+            BotCommand("cancel", "Cancel the currently active batch task"),
             BotCommand("setbot", "Set your custom bot token"),
             BotCommand("rembot", "Remove your custom bot token")
         ])
@@ -45,20 +51,33 @@ async def setup_bot_commands():
     except Exception as e:
         print(f"⚠️ Failed to set bot commands: {e}")
 
-async def main():
-    print("🚀 Initializing Bot Engine with Speed Boost...")
+async def load_and_run_plugins():
     try:
         await start_client()
     except Exception as e:
-        print(f"❌ Error starting clients: {e}")
-        return
+        print(f"Error during client start: {e}")
         
+    plugin_dir = "plugins"
+    plugins = [f[:-3] for f in os.listdir(plugin_dir) if f.endswith(".py") and f != "__init__.py"]
+
+    for plugin in plugins:
+        try:
+            # 🟢 FIX: Ab koi plugin crash hua toh wo aage badh jayega bina bot ko roke
+            module = importlib.import_module(f"plugins.{plugin}")
+            if hasattr(module, f"run_{plugin}_plugin"):
+                print(f"Running {plugin} plugin...")
+                await getattr(module, f"run_{plugin}_plugin")()  
+        except Exception as e:
+            pass # Chup chap aage badh jayega, crash nahi hoga
+
+async def main():
+    await load_and_run_plugins()
     await setup_bot_commands()  
     asyncio.create_task(human_behavior_routine())
     
-    print("✅ Bot is online and listening to your commands at Max Speed!")
+    print("🚀 Bot is Online and Ready to take commands!")
     
-    # 🟢 3. BOT KO ZINDA RAKHNE KE LIYE (Yeh response block nahi karega)
+    # 🟢 FIX: Block wala while loop hta kar idle lagaya, isse bot har command ka turant response dega.
     await idle()
 
 if __name__ == "__main__":
@@ -67,10 +86,15 @@ if __name__ == "__main__":
     try:
         loop.run_until_complete(main())
     except KeyboardInterrupt:
-        print("🛑 Shutting down gracefully...")
+        print("Shutting down...")
     except Exception as e:
         print(f"⚠️ CRITICAL ERROR: {e}")
-        print("⏳ Sleeping 15 Minutes to clear limits...")
+        print("⏳ Bot is facing a FloodWait or Server Ban. Sleeping for 15 Minutes to clear limits...")
         time.sleep(900)  
         print("🔄 Restarting now...")
         sys.exit(1)
+    finally:
+        try:
+            loop.close()
+        except Exception:
+            pass
