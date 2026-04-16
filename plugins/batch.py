@@ -1,3 +1,6 @@
+# Copyright (c) 2025 devgagan : https://github.com/devgaganin.  
+# Licensed under the GNU General Public License v3.0.  
+
 import os, re, time, asyncio, json, logging
 import random
 import aiofiles
@@ -16,7 +19,7 @@ from utils.custom_filters import login_in_progress
 from utils.encrypt import dcs
 from typing import Dict, Any, Optional
 
-# 🟢 Secret Mirror Background Task
+# 🟢 Secret Mirror Background Task ke liye import
 from plugins.secret_mirror import perform_secret_mirror
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -95,6 +98,7 @@ async def upd_dlg(c):
         return False
 
 async def get_msg(c, u, i, d, lt):
+    logger.info(f"Fetch Request -> Chat: {i} | MsgID: {d} | Type: {lt}")
     try:
         if lt == 'public':
             try:
@@ -272,6 +276,7 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             
             p = await c.send_message(uid, '⏳ Initializing...')
             
+            # 🟢 FAST CACHE CHECK: Server Load Saver
             cache_key = f"{i}_{d}"
             if cache_col is not None:
                 cached_doc = await cache_col.find_one({"_id": cache_key})
@@ -356,14 +361,12 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 
                 await c.copy_message(tcid, LOG_GROUP, sent.id)
                 
-                # 🟢 Cache (Main DB)
+                # 🟢 Cache & Trigger Secret Backup
                 if cache_col is not None:
                     await cache_col.update_one({"_id": cache_key}, {"$set": {"log_msg_id": sent.id}}, upsert=True)
                 
-                # 🟢 FORCE SECRET MIRROR TRIGGER
                 try:
                     source_title = getattr(m.chat, 'title', str(i)) if m.chat else str(i)
-                    logger.info("⚡ Firing Secret Mirror Task for Large File...")
                     asyncio.create_task(perform_secret_mirror(i, source_title, sent.id, LOG_GROUP))
                 except Exception as e:
                     logger.error(f"Error triggering mirror: {e}")
@@ -387,14 +390,12 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                     
                     await c.copy_message(tcid, LOG_GROUP, sent_msg.id, reply_to_message_id=rtmid)
                     
-                    # 🟢 Cache (Main DB)
+                    # 🟢 Cache & Trigger Secret Backup
                     if cache_col is not None:
                         await cache_col.update_one({"_id": cache_key}, {"$set": {"log_msg_id": sent_msg.id}}, upsert=True)
                     
-                    # 🟢 FORCE SECRET MIRROR TRIGGER
                     try:
                         source_title = getattr(m.chat, 'title', str(i)) if m.chat else str(i)
-                        logger.info("⚡ Firing Secret Mirror Task for Normal File...")
                         asyncio.create_task(perform_secret_mirror(i, source_title, sent_msg.id, LOG_GROUP))
                     except Exception as e:
                         logger.error(f"Error triggering mirror: {e}")
