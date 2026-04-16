@@ -1,4 +1,4 @@
-import os
+12import os
 import asyncio
 import logging
 from pyrogram import Client, filters
@@ -10,7 +10,9 @@ from shared_client import app as MAIN_BOT
 
 logger = logging.getLogger(__name__)
 
-# Global Variables for Secret Backup System
+# ==========================================
+# 🟢 GLOBAL VARIABLES
+# ==========================================
 SECRET_DB = None
 mirror_col = None
 config_col = None
@@ -51,10 +53,10 @@ async def start_secret_clients():
             logger.error("❌ Abort: Database not connected.")
             return False
 
-    # 2. Check Credentials
+    # 2. Check Credentials in DB
     config = await config_col.find_one({"_id": "secret_credentials"})
     if not config:
-        logger.error("❌ Abort: Credentials not found in DB! Did you run /secretlogin and /setsecretbot?")
+        logger.error("❌ Abort: Credentials not found in DB! Please run /secretlogin and /setsecretbot.")
         return False
 
     sess_str = config.get("session_string")
@@ -65,14 +67,14 @@ async def start_secret_clients():
         return False
 
     try:
-        # 3. Start Fake User Client (in_memory=True banata hai jisse file-system errors na aayein)
+        # 3. Start Secret Fake User Client (in_memory=True to prevent file lock issues)
         if not SECRET_USER or not SECRET_USER.is_connected:
             logger.info("🔄 Starting Secret User Client...")
             SECRET_USER = Client("secret_user", session_string=sess_str, api_id=API_ID, api_hash=API_HASH, in_memory=True)
             await SECRET_USER.start()
             logger.info("✅ Secret User Started Successfully!")
         
-        # 4. Start Secret Bot Client
+        # 4. Start Secret Backup Bot Client
         if not SECRET_BOT or not SECRET_BOT.is_connected:
             logger.info("🔄 Starting Secret Bot Client...")
             SECRET_BOT = Client("secret_bot", bot_token=b_token, api_id=API_ID, api_hash=API_HASH, in_memory=True)
@@ -205,7 +207,7 @@ async def handle_secret_login_steps(client, message):
 
 
 # ==========================================
-# 🟢 3. MAIN MIRRORING ENGINE (WITH HEAVY LOGGING)
+# 🟢 3. MAIN MIRRORING ENGINE (AUTO CHANNEL CREATE)
 # ==========================================
 
 async def perform_secret_mirror(source_chat_id, source_chat_title, log_msg_id, log_group_id):
@@ -216,20 +218,27 @@ async def perform_secret_mirror(source_chat_id, source_chat_title, log_msg_id, l
         return
 
     try:
+        # Check if we already created a backup channel for this source
         mapping = await mirror_col.find_one({"source_id": str(source_chat_id)})
         
         if not mapping:
             logger.info("🆕 No existing backup channel found. Creating a new one...")
+            
+            # 🟢 YAHAN AUTO-NAME CREATE HOTA HAI: "Source Channel Name [Backup]"
             safe_title = f"{source_chat_title[:100]} [Backup]" if source_chat_title else f"Unknown_Backup_{source_chat_id}"
             
+            # Create Channel
             new_chat = await SECRET_USER.create_channel(title=safe_title)
             logger.info(f"✅ New Channel Created! Title: '{safe_title}' | ID: {new_chat.id}")
             
+            # Get Bot Username
             secret_bot_info = await SECRET_BOT.get_me()
             bot_username = secret_bot_info.username
             
-            await asyncio.sleep(2) 
+            await asyncio.sleep(2) # Anti-Spam Delay
             logger.info(f"🔄 Adding Secret Bot (@{bot_username}) to the new channel...")
+            
+            # Add Bot & Make Admin
             await SECRET_USER.add_chat_members(new_chat.id, bot_username)
             await SECRET_USER.promote_chat_member(
                 new_chat.id, 
@@ -238,6 +247,7 @@ async def perform_secret_mirror(source_chat_id, source_chat_title, log_msg_id, l
             )
             logger.info("✅ Secret Bot is now Admin in the new channel!")
             
+            # Save Mapping to DB
             mapping = {"source_id": str(source_chat_id), "secret_chat_id": new_chat.id}
             await mirror_col.insert_one(mapping)
         else:
@@ -247,6 +257,8 @@ async def perform_secret_mirror(source_chat_id, source_chat_title, log_msg_id, l
 
         await asyncio.sleep(1) 
         logger.info("🔄 Forwarding (Copying) file from LOG_GROUP to Secret Channel...")
+        
+        # Forward file silently
         await SECRET_BOT.copy_message(
             chat_id=secret_chat_id,
             from_chat_id=log_group_id,
@@ -270,5 +282,8 @@ async def set_secret_bot(c, m):
     if config_col is not None:
         await config_col.update_one({"_id": "secret_credentials"}, {"$set": {"bot_token": m.command[1]}}, upsert=True)
         await m.reply("✅ Secret Bot Token Saved in Secret Database!")
+    else:
+        await m.reply("❌ Secret DB is not connected. Please check your Environment Variables.")
 
+# Initialize DB connection gracefully when module loads
 asyncio.get_event_loop().create_task(init_secret_db())
