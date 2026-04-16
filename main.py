@@ -1,18 +1,22 @@
 import os
 import sys
 import random
+import time
 import asyncio
 from pyrogram import idle
 from pyrogram.types import BotCommand  
 
-# 🟢 UVLOOP WAPAS ADD KIYA GAYA HAI SPEED KE LIYE
+# 🟢 1. UVLOOP & EVENT LOOP SETUP (SABSE PEHLE START HOGA TAURI CRASH NA HO)
 try:
     import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     print("⚡ uvloop activated! Async operations will run at max speed.")
 except ImportError:
     print("⚠️ uvloop not installed. Standard asyncio will be used.")
 
+# 🟢 2. CLIENTS IMPORT (Loop banne ke baad import honge)
 from shared_client import start_client, app
 import utils.func as global_state
 
@@ -53,20 +57,20 @@ async def main():
     asyncio.create_task(human_behavior_routine())
     
     print("✅ Bot is online and listening to your commands at Max Speed!")
-    # 🟢 Yahan se bot commands sune ga
+    
+    # 🟢 3. BOT KO ZINDA RAKHNE KE LIYE (Yeh response block nahi karega)
     await idle()
 
 if __name__ == "__main__":
-    try:
-        # Loop configuration for uvloop
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
+    loop = asyncio.get_event_loop()
+    print("Starting clients ...")
     try:
         loop.run_until_complete(main())
     except KeyboardInterrupt:
         print("🛑 Shutting down gracefully...")
     except Exception as e:
         print(f"⚠️ CRITICAL ERROR: {e}")
+        print("⏳ Sleeping 15 Minutes to clear limits...")
+        time.sleep(900)  
+        print("🔄 Restarting now...")
+        sys.exit(1)
