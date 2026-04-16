@@ -19,7 +19,7 @@ from utils.custom_filters import login_in_progress
 from utils.encrypt import dcs
 from typing import Dict, Any, Optional
 
-# 🟢 Secret Mirror Background Task ke liye import
+# Secret Mirror Background Task
 from plugins.secret_mirror import perform_secret_mirror
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -33,7 +33,7 @@ ACTIVE_USERS = {}
 ACTIVE_USERS_FILE = "active_users.json"
 LAST_UPDATE_TIME = {}
 
-# 🟢 DB CACHE SETUP
+# DB CACHE SETUP
 try:
     db_client = AsyncIOMotorClient(MONGO_DB)
     db = db_client[DB_NAME]
@@ -106,6 +106,7 @@ async def get_msg(c, u, i, d, lt):
                 if msg and not getattr(msg, "empty", False):
                     return msg
             except FloodWait as fw:
+                logger.warning(f"⏳ [FLOOD_WAIT - FETCH] Telegram limit hit! Sleeping for {fw.value} seconds...")
                 await asyncio.sleep(fw.value + 5)
                 msg = await c.get_messages(i, d)
                 if msg and not getattr(msg, "empty", False):
@@ -119,6 +120,7 @@ async def get_msg(c, u, i, d, lt):
                     if msg and not getattr(msg, "empty", False):
                         return msg
                 except FloodWait as fw:
+                    logger.warning(f"⏳ [FLOOD_WAIT - USER FETCH] Telegram limit hit! Sleeping for {fw.value} seconds...")
                     await asyncio.sleep(fw.value + 5)
                     msg = await u.get_messages(i, d)
                     if msg and not getattr(msg, "empty", False):
@@ -143,6 +145,7 @@ async def get_msg(c, u, i, d, lt):
                             if result and not getattr(result, "empty", False):
                                 return result
                         except FloodWait as fw:
+                            logger.warning(f"⏳ [FLOOD_WAIT - PRIVATE FETCH] Telegram limit hit! Sleeping for {fw.value} seconds...")
                             await asyncio.sleep(fw.value + 5)
                             result = await u.get_messages(target_id, d)
                             if result and not getattr(result, "empty", False):
@@ -208,6 +211,8 @@ async def prog(c, t, C, h, m, st):
         async def safe_edit():
             try:
                 await C.edit_message_text(h, m, text)
+            except FloodWait as fw:
+                logger.warning(f"⏳ [FLOOD_WAIT - PROGRESS BAR] Bot rate-limited on edit for {fw.value}s. Ignoring edit to continue downloading.")
             except Exception:
                 pass
                 
@@ -227,12 +232,18 @@ async def send_direct(c, m, tcid, ft=None, rtmid=None):
         elif m.document: await c.send_document(tcid, m.document.file_id, caption=ft, file_name=m.document.file_name, reply_to_message_id=rtmid)
         else: return False
         return True
+    except FloodWait as fw:
+        logger.warning(f"⏳ [FLOOD_WAIT - DIRECT SEND] Sending paused for {fw.value} seconds.")
+        await asyncio.sleep(fw.value + 2)
+        return False
     except Exception as e:
         return False
 
 async def safe_status_edit(client, chat_id, msg_id, text):
     try:
         await client.edit_message_text(chat_id, msg_id, text)
+    except FloodWait as fw:
+        logger.warning(f"⏳ [FLOOD_WAIT - STATUS EDIT] Edit blocked for {fw.value}s. Bot will silently continue processing.")
     except Exception:
         pass
 
@@ -276,7 +287,7 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             
             p = await c.send_message(uid, '⏳ Initializing...')
             
-            # 🟢 FAST CACHE CHECK: Server Load Saver
+            # FAST CACHE CHECK
             cache_key = f"{i}_{d}"
             if cache_col is not None:
                 cached_doc = await cache_col.find_one({"_id": cache_key})
@@ -296,6 +307,10 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                     await client_to_use.copy_message(chat_id=tcid, from_chat_id=m.chat.id, message_id=m.id, caption=ft if ft else None, reply_to_message_id=rtmid)
                     await c.delete_messages(uid, p.id)
                     return 'Fast Forwarded ✅'
+                except FloodWait as fw:
+                    logger.warning(f"⏳ [FLOOD_WAIT - FORWARD] Forward blocked for {fw.value}s.")
+                    await safe_status_edit(c, uid, p.id, f"⚠️ **Telegram FloodWait:** Sleeping {fw.value}s...")
+                    await asyncio.sleep(fw.value + 5)
                 except Exception as e:
                     await safe_status_edit(c, uid, p.id, f"⚠️ **Forward Error:** `{str(e)[:30]}`\n🔄 Downloading...")
                     await asyncio.sleep(3)
@@ -315,6 +330,11 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             try:
                 client_to_use = getattr(m, '_client', u if u else c)
                 f = await client_to_use.download_media(m, file_name=c_name, progress=prog, progress_args=(c, uid, p.id, st))
+            except FloodWait as fw:
+                logger.error(f"⏳ [FLOOD_WAIT - DOWNLOAD] Blocked for {fw.value}s.")
+                await safe_status_edit(c, uid, p.id, f"⚠️ FloodWait: Telegram blocked download for {fw.value} seconds.")
+                await asyncio.sleep(fw.value + 5)
+                f = None
             except Exception:
                 f = None
                 
@@ -351,17 +371,23 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 
                 send_funcs = {'video': Y.send_video, 'video_note': Y.send_video_note, 'voice': Y.send_voice, 'audio': Y.send_audio, 'photo': Y.send_photo, 'document': Y.send_document}
                 
-                for mtype, func in send_funcs.items():
-                    if f.endswith('.mp4'): mtype = 'video'
-                    if getattr(m, mtype, None):
-                        sent = await func(LOG_GROUP, f, thumb=th if mtype == 'video' else None, duration=dur if mtype == 'video' else None, height=h if mtype == 'video' else None, width=w if mtype == 'video' else None, caption=ft if m.caption and mtype not in ['video_note', 'voice'] else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st))
-                        break
-                else:
-                    sent = await Y.send_document(LOG_GROUP, f, thumb=th, caption=ft if m.caption else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st))
+                try:
+                    for mtype, func in send_funcs.items():
+                        if f.endswith('.mp4'): mtype = 'video'
+                        if getattr(m, mtype, None):
+                            sent = await func(LOG_GROUP, f, thumb=th if mtype == 'video' else None, duration=dur if mtype == 'video' else None, height=h if mtype == 'video' else None, width=w if mtype == 'video' else None, caption=ft if m.caption and mtype not in ['video_note', 'voice'] else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st))
+                            break
+                    else:
+                        sent = await Y.send_document(LOG_GROUP, f, thumb=th, caption=ft if m.caption else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st))
+                except FloodWait as fw:
+                    logger.error(f"⏳ [FLOOD_WAIT - 2GB+ UPLOAD] Bot hit limit for {fw.value}s!")
+                    await safe_status_edit(c, uid, p.id, f"⚠️ FloodWait (2GB+): Sleeping for {fw.value}s...")
+                    await asyncio.sleep(fw.value + 5)
+                    os.remove(f)
+                    return 'Failed (FloodWait).'
                 
                 await c.copy_message(tcid, LOG_GROUP, sent.id)
                 
-                # 🟢 Cache & Trigger Secret Backup
                 if cache_col is not None:
                     await cache_col.update_one({"_id": cache_key}, {"$set": {"log_msg_id": sent.id}}, upsert=True)
                 
@@ -390,7 +416,6 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                     
                     await c.copy_message(tcid, LOG_GROUP, sent_msg.id, reply_to_message_id=rtmid)
                     
-                    # 🟢 Cache & Trigger Secret Backup
                     if cache_col is not None:
                         await cache_col.update_one({"_id": cache_key}, {"$set": {"log_msg_id": sent_msg.id}}, upsert=True)
                     
@@ -409,6 +434,12 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                     else:
                         await c.send_document(tcid, document=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
 
+            except FloodWait as fw:
+                logger.error(f"⏳ [FLOOD_WAIT - UPLOAD] Bot hit limit for {fw.value}s!")
+                await safe_status_edit(c, uid, p.id, f"⚠️ FloodWait: Telegram blocked upload for {fw.value} seconds.")
+                await asyncio.sleep(fw.value + 5)
+                if os.path.exists(f): os.remove(f)
+                return 'Failed (FloodWait).'
             except Exception as e:
                 await safe_status_edit(c, uid, p.id, f'Upload failed: {str(e)[:30]}')
                 if os.path.exists(f): os.remove(f)
@@ -698,6 +729,11 @@ async def text_handler(c, m):
                     else:
                         try: await safe_status_edit(c, uid, pt.id, f"⚠️ Skipped {mid}: Not found.")
                         except: pass
+                except FloodWait as fw:
+                    logger.warning(f"⏳ [FLOOD_WAIT - BATCH LOOP] Bot blocked for {fw.value}s!")
+                    try: await safe_status_edit(c, uid, pt.id, f"⏳ **Telegram Rate Limit:** Sleeping for {fw.value} seconds...")
+                    except: pass
+                    await asyncio.sleep(fw.value + 5)
                 except Exception as e:
                     try: await safe_status_edit(c, uid, pt.id, f'{j+1}/{n}: Error - {str(e)[:30]}')
                     except: pass
