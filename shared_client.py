@@ -1,26 +1,33 @@
 from telethon import TelegramClient
 from telethon.sessions import MemorySession
-from config import API_ID, API_HASH, BOT_TOKEN, STRING
 from pyrogram import Client
+from config import API_ID, API_HASH, BOT_TOKEN, STRING
 import sys
 
-client = TelegramClient(MemorySession(), API_ID, API_HASH)
+# 🟢 FIX: Pyrogram native plugin loader activated! 
+app = Client(
+    "pyrogrambot", 
+    api_id=API_ID, 
+    api_hash=API_HASH, 
+    bot_token=BOT_TOKEN,
+    plugins=dict(root="plugins")
+)
 
-# 🟢 FIX: Added plugins=dict(root="plugins") taaki bot apne commands dhundh sake
-app = Client("pyrogrambot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN, plugins=dict(root="plugins"))
-userbot = Client("4gbbot", api_id=API_ID, api_hash=API_HASH, session_string=STRING)
+client = TelegramClient(MemorySession(), API_ID, API_HASH)
+userbot = Client("4gbbot", api_id=API_ID, api_hash=API_HASH, session_string=STRING) if STRING else None
 
 async def start_client():
     if not client.is_connected():
         await client.start(bot_token=BOT_TOKEN)
-        print("SpyLib (Telethon) started in Memory Mode...")
-    if STRING:
+        print("✅ Telethon started in Memory Mode...")
+    
+    if userbot:
         try:
             await userbot.start()
-            print("Userbot started...")
+            print("✅ Premium Userbot started...")
         except Exception as e:
-            print(f"Hey honey!! check your premium string session, it may be invalid or expired: {e}")
-            sys.exit(1)
+            print(f"⚠️ Userbot session error: {e}")
+            
     await app.start()
-    print("Pyro App Started...")
+    print("✅ Pyrogram App Started...")
     return client, app, userbot
