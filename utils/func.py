@@ -31,7 +31,8 @@ PUBLIC_LINK_PATTERN = re.compile(r'(https?://)?(t\.me|telegram\.me)/([^/]+)(/(\d
 PRIVATE_LINK_PATTERN = re.compile(r'(https?://)?(t\.me|telegram\.me)/c/(\d+)(/(\d+))?')
 VIDEO_EXTENSIONS = {"mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "mpeg", "mpg", "3gp"}
 
-mongo_client = AsyncIOMotorClient(MONGO_URI)
+# Connection pooling jisse bot DB ko baar-baar open/close na kare
+mongo_client = AsyncIOMotorClient(MONGO_URI, maxPoolSize=50, minPoolSize=10, maxIdleTimeMS=10000)
 db = mongo_client[DB_NAME]
 users_collection = db["users"]
 premium_users_collection = db["premium_users"]
