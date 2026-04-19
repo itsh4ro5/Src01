@@ -244,7 +244,12 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 for old, new in task.get("replace_dict", {}).items(): raw_caption = re.sub(re.escape(old), new, raw_caption, flags=re.IGNORECASE)
             
             raw_caption = re.sub(r'\.(mp4|mkv|pdf|avi|webm|jpg|png)', '', raw_caption, flags=re.IGNORECASE)
-            ft = raw_caption.strip()  # 🟢 FIX: beautify_caption hata diya gaya hai!
+            
+            # 🟢 SMART CAPTION CHECK: Agar pehle se formatted hai, toh chhed-chhaad mat karo!
+            if "🎬 Title:" in raw_caption or "📁 Topic:" in raw_caption or "🎬" in raw_caption:
+                ft = raw_caption.strip()
+            else:
+                ft = beautify_caption(raw_caption)
             is_restricted = getattr(m.chat, "has_protected_content", False)
             
             if lt == 'public' and not is_restricted:
@@ -412,12 +417,17 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             await c.delete_messages(uid, p.id)
             return 'Done.'
             
-        elif m.text:
+       elif m.text:
             orig_text = m.text.markdown
             proc_text = await process_text_with_rules(uid, orig_text)
             user_cap = await get_user_data_key(uid, 'caption', '')
             raw_caption = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
-            ft = raw_caption.strip()
+            
+            # 🟢 SMART CAPTION CHECK 
+            if "🎬 Title:" in raw_caption or "📁 Topic:" in raw_caption or "🎬" in raw_caption:
+                ft = raw_caption.strip()
+            else:
+                ft = beautify_caption(raw_caption)
             await c.send_message(tcid, text=ft if ft else orig_text, reply_to_message_id=rtmid)
             return 'Sent.'
             
