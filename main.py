@@ -4,10 +4,11 @@ import random
 import time
 import asyncio
 import importlib
+import traceback
 from pyrogram.types import BotCommand  
-from pyrogram import idle# 🟢 Bot ko background me jagaye rakhne ke liye
-from pyrogram.errors import FloodWait
+from pyrogram import idle
 
+# 🟢 SPEED BOOST: Activate Ultra-Fast Async Engine
 try:
     import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -15,7 +16,7 @@ try:
     asyncio.set_event_loop(loop)
     print("⚡ uvloop activated! Async operations will run at max speed.")
 except ImportError:
-    print("⚠️ uvloop not installed. Standard asyncio will be used.")
+    print("⚠️ uvloop not installed. Standard asyncio will be used. (pip install uvloop)")
 
 from shared_client import start_client, app
 import utils.func as global_state
@@ -53,33 +54,26 @@ async def setup_bot_commands():
         print(f"⚠️ Failed to set bot commands: {e}")
 
 async def load_and_run_plugins():
-    try:
-        await start_client()
-    except Exception as e:
-        print(f"Error during client start: {e}")
-        
     plugin_dir = "plugins"
     plugins = [f[:-3] for f in os.listdir(plugin_dir) if f.endswith(".py") and f != "__init__.py"]
 
     for plugin in plugins:
         try:
-            # 🟢 FIX: Ab koi plugin crash hua toh wo aage badh jayega bina bot ko roke
-            module = importlib.import_module(f"plugins.{plugin}")
-            if hasattr(module, f"run_{plugin}_plugin"):
-                print(f"Running {plugin} plugin...")
-                await getattr(module, f"run_{plugin}_plugin")()  
+            importlib.import_module(f"plugins.{plugin}")
+            print(f"✅ Loaded plugin: {plugin}")
         except Exception as e:
-            print(f"⚠️ Failed to load plugin '{plugin}': {e}") # Isse error terminal me dikhega # Chup chap aage badh jayega, crash nahi hoga
+            # Ye traceback exact batayega ki file me kahan galti hai
+            print(f"❌ ERROR loading plugin '{plugin}':")
+            traceback.print_exc()
 
 async def main():
-    await load_and_run_plugins()
+    await start_client()  # Pehle client start karo
+    await load_and_run_plugins() # Fir plugins load karo
     await setup_bot_commands()  
     asyncio.create_task(human_behavior_routine())
     
     print("🚀 Bot is Online and Ready to take commands!")
-    
-    # 🟢 FIX: Block wala while loop hta kar idle lagaya, isse bot har command ka turant response dega.
-    await idle()
+    await idle()  # Ye bot ko active rakhega saari commands receive karne ke liye
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
@@ -88,12 +82,10 @@ if __name__ == "__main__":
         loop.run_until_complete(main())
     except KeyboardInterrupt:
         print("Shutting down...")
-    except FloodWait as e:
-        wait_time = e.value + 20
-        print(f"⏳ Global FloodWait detect hua! Telegram ne {e.value}s bola hai. Hum rukenge...")
-        time.sleep(wait_time) 
-        print("🔄 Buffer complete. Auto-Restarting Bot now...")
-        # Graceful restart bina bot ko mare:
+    except Exception as e:
+        print(f"⚠️ CRITICAL ERROR: {e}")
+        time.sleep(10)  
+        print("🔄 Restarting now...")
         os.execv(sys.executable, ['python'] + sys.argv)
     finally:
         try:
