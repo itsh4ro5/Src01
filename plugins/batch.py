@@ -419,7 +419,7 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             await c.delete_messages(uid, p.id)
             return 'Done.'
             
-       elif m.text:
+        elif m.text:
             orig_text = m.text.markdown
             proc_text = await process_text_with_rules(uid, orig_text)
             user_cap = await get_user_data_key(uid, 'caption', '')
