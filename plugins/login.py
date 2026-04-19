@@ -16,7 +16,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Aapke main.py wala exact device spoofing parameters
-DEVICE_MODEL = "realme P3 Pro 5G"
+DEVICE_MODELS = [
+    "realme P3 Pro 5G", "Samsung Galaxy S23 Ultra", "OnePlus 11R", 
+    "Xiaomi 13 Pro", "Google Pixel 8 Pro", "Vivo X90 Pro"
+]
 SYSTEM_VERSION = "Android 14"
 APP_VERSION = "12.5.2"
 
@@ -126,9 +129,9 @@ async def handle_login_steps(client, message):
                 api_id=API_ID, 
                 api_hash=API_HASH, 
                 in_memory=True,
-                device_model=DEVICE_MODEL,
-                system_version=SYSTEM_VERSION,
-                app_version=APP_VERSION,
+                device_model=random.choice(DEVICE_MODELS), # <--- Dynamic
+                system_version="Android 14",
+                app_version="12.5.2",
                 sleep_threshold=120
             )
             
