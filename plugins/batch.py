@@ -9,6 +9,7 @@ from pyrogram.errors import UserNotParticipant, FloodWait
 from config import API_ID, API_HASH, LOG_GROUP, STRING, FORCE_SUB, FREEMIUM_LIMIT, PREMIUM_LIMIT, MONGO_DB, DB_NAME
 import utils.func as global_state  # Direct reference state
 from utils.func import get_user_data, screenshot, thumbnail, get_video_metadata, save_user_data
+import utils.func as global_state
 from utils.func import get_user_data_key, process_text_with_rules, is_premium_user, E, log_admin_activity, get_display_name
 from utils.func import generate_thumbnail, beautify_caption
 from shared_client import app as X
