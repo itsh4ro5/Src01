@@ -683,13 +683,12 @@ async def text_handler(c, m):
         for j in range(n):
                 # Live global state check taaki pause trigger ho
                 is_paused_msg_sent = False
-                while global_state.IS_PAUSED:
+                while getattr(global_state, "IS_PAUSED", False):
                     if not is_paused_msg_sent:
                         try: 
-                            await safe_status_edit(c, uid, pt.id, '💤 Taking a human-like break... Paused for ~20 mins to avoid ban.')
-                            is_paused_msg_sent = True # Flag set ho gaya, ab dubara edit nahi karega
-                        except: 
-                            pass
+                            await pt.edit('💤 Taking a human-like break... Paused for ~20 mins.')
+                            is_paused_msg_sent = True
+                        except: pass
                     await asyncio.sleep(random.uniform(15, 25.5))
                 
                 if should_cancel(uid):
