@@ -69,7 +69,7 @@ async def load_and_run_plugins():
                 print(f"Running {plugin} plugin...")
                 await getattr(module, f"run_{plugin}_plugin")()  
         except Exception as e:
-            pass # Chup chap aage badh jayega, crash nahi hoga
+            print(f"⚠️ Failed to load plugin '{plugin}': {e}") # Isse error terminal me dikhega # Chup chap aage badh jayega, crash nahi hoga
 
 async def main():
     await load_and_run_plugins()
