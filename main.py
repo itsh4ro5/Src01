@@ -89,15 +89,12 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("Shutting down...")
     except FloodWait as e:
-        # Telegram ka wait time + 10 seconds extra safety buffer
         wait_time = e.value + 20
-        print(f"⏳ FloodWait detect hua! Telegram ne {e.value}s bola hai, hum {wait_time}s rukenge...")
+        print(f"⏳ Global FloodWait detect hua! Telegram ne {e.value}s bola hai. Hum rukenge...")
         time.sleep(wait_time) 
-        print("🔄 Buffer complete. Restarting now...")
-        sys.exit(1)
-    except Exception as e:
-        print(f"⚠️ CRITICAL ERROR: {e}")
-        sys.exit(1)
+        print("🔄 Buffer complete. Auto-Restarting Bot now...")
+        # Graceful restart bina bot ko mare:
+        os.execv(sys.executable, ['python'] + sys.argv)
     finally:
         try:
             loop.close()
