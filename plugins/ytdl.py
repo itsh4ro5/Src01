@@ -377,7 +377,8 @@ async def process_video(client, event, url, cookies_env_var, check_duration_and_
          
         if thumbnail_url:
             thumbnail_file = os.path.join(tempfile.gettempdir(), get_random_string() + ".jpg")
-            downloaded_thumb = d_thumbnail(thumbnail_url, thumbnail_file)
+            await download_thumbnail_async(thumbnail_url, thumbnail_file)
+            downloaded_thumb = thumbnail_file
             if downloaded_thumb:
                 logger.info(f"Thumbnail saved at: {downloaded_thumb}")
  
