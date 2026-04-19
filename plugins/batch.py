@@ -680,8 +680,8 @@ async def text_handler(c, m):
             "cancel_requested": False, "progress_message_id": pt.id
         })
         
-        for j in range(n):
-                # Live global state check taaki pause trigger ho
+        try:
+            for j in range(n):
                 is_paused_msg_sent = False
                 while getattr(global_state, "IS_PAUSED", False):
                     if not is_paused_msg_sent:
@@ -689,32 +689,28 @@ async def text_handler(c, m):
                             await pt.edit('💤 Taking a human-like break... Paused for ~20 mins.')
                             is_paused_msg_sent = True
                         except: pass
-                    await asyncio.sleep(random.uniform(15, 25.5))
+                    await asyncio.sleep(random.uniform(55.5, 65.5))
                 
                 if should_cancel(uid):
-                    await safe_status_edit(c, uid, pt.id, f'Cancelled at {j}/{n}. Success: {success}')
+                    await pt.edit(f'Cancelled at {j}/{n}. Success: {success}')
                     break
                 
                 await update_batch_progress(uid, j, success)
                 
-                mid = int(s_id) + j
+                mid = int(s) + j
                 try:
+                    target_chat_id = m.chat.id
                     msg = await get_msg(ubot, uc, i, mid, lt)
                     if msg:
                         task_data = {"watermark": await get_user_data_key(uid, "watermark", "")}
                         res = await process_msg(ubot, uc, msg, target_chat_id, lt, uid, i, task=task_data)
-                        
-                        if res and isinstance(res, str) and any(x in res for x in ['Done', 'Copied', 'Sent', 'Forwarded', 'Cached']):
+                        if res and isinstance(res, str) and any(x in res for x in ['Done', 'Copied', 'Sent', 'Forwarded']):
                             success += 1
                     else:
-                        try: await safe_status_edit(c, uid, pt.id, f"⚠️ Skipped {mid}: Not found.")
+                        try: await pt.edit(f"⚠️ Skipped {mid}: Not found.")
                         except: pass
-                except FloodWait as fw:
-                    try: await safe_status_edit(c, uid, pt.id, f"⏳ **Telegram Rate Limit:** Sleeping for {fw.value} seconds...")
-                    except: pass
-                    await asyncio.sleep(fw.value + 5)
                 except Exception as e:
-                    try: await safe_status_edit(c, uid, pt.id, f'{j+1}/{n}: Error - {str(e)[:30]}')
+                    try: await pt.edit(f'{j+1}/{n}: Error - {str(e)[:30]}')
                     except: pass
                 
                 if n > 1:
@@ -723,14 +719,6 @@ async def text_handler(c, m):
                     except: pass
                     await asyncio.sleep(delay_time)
             
-            # 🟢 Yeh dono 'if' lines exactly 'for' ke theek niche aligned honi chahiye
-            if success > 0 or j + 1 == n:
-                try:
-                    admin_name = getattr(m.from_user, "first_name", "Admin")
-                    await log_admin_activity(uid, admin_name, "Batch Completed", f"({success}/{n} Files)")
-                except:
-                    pass
-
             if j + 1 == n:
                 await m.reply_text(f'Batch Completed ✅ Success: {success}/{n}')
                 
