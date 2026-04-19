@@ -97,10 +97,10 @@ async def start_handler(client, message):
     b9 = spy.b64decode(a10).decode()
     b10 = spy.b64decode(a11).decode()
 
-    #tm = await getattr(app, b3)(b1, b2)
+    tm = await getattr(app, b3)(b1, b2)
 
-    #pb = getattr(tm, spy.b64decode(attr1.encode()).decode())
-    #fd = getattr(pb, spy.b64decode(attr2.encode()).decode())
+    pb = getattr(tm, spy.b64decode(attr1.encode()).decode())
+    fd = getattr(pb, spy.b64decode(attr2.encode()).decode())
 
     kb = IKM([
         [IK(b7, url=JL)],
@@ -108,7 +108,7 @@ async def start_handler(client, message):
     ])
 
     await getattr(message, b4)(
-        "https://i.ibb.co/qLSbQYGP/x.jpg",
+        fd,
         caption=b6,
         reply_markup=kb
     )
