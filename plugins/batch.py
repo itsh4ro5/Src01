@@ -6,7 +6,8 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import UserNotParticipant, FloodWait
 from config import API_ID, API_HASH, LOG_GROUP, STRING, FORCE_SUB, FREEMIUM_LIMIT, PREMIUM_LIMIT, MONGO_DB, DB_NAME
-from utils.func import get_user_data, screenshot, thumbnail, get_video_metadata, IS_PAUSED, save_user_data
+import utils.func as global_state  # Direct reference state
+from utils.func import get_user_data, screenshot, thumbnail, get_video_metadata, save_user_data
 from utils.func import get_user_data_key, process_text_with_rules, is_premium_user, E, log_admin_activity, get_display_name
 from utils.func import generate_thumbnail, beautify_caption
 from shared_client import app as X
@@ -677,12 +678,14 @@ async def text_handler(c, m):
             "cancel_requested": False, "progress_message_id": pt.id
         })
         
-        try:
-            for j in range(n):
-                while IS_PAUSED:
-                    try: await safe_status_edit(c, uid, pt.id, 'Taking a human-like break... Paused for ~20 mins.')
-                    except: pass
-                    await asyncio.sleep(random.uniform(55.5, 65.5))
+        for j in range(n):
+                # Live global state check taaki pause trigger ho
+                while global_state.IS_PAUSED:
+                    try: 
+                        await safe_status_edit(c, uid, pt.id, '💤 Taking a human-like break... Paused for ~20 mins to avoid ban.')
+                    except: 
+                        pass
+                    await asyncio.sleep(random.uniform(15, 25.5))
                 
                 if should_cancel(uid):
                     await safe_status_edit(c, uid, pt.id, f'Cancelled at {j}/{n}. Success: {success}')
