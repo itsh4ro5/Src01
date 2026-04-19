@@ -5,7 +5,8 @@ import time
 import asyncio
 import importlib
 from pyrogram.types import BotCommand  
-from pyrogram import idle # 🟢 Bot ko background me jagaye rakhne ke liye
+from pyrogram import idle# 🟢 Bot ko background me jagaye rakhne ke liye
+from pyrogram.errors import FloodWait
 
 try:
     import uvloop
@@ -87,11 +88,15 @@ if __name__ == "__main__":
         loop.run_until_complete(main())
     except KeyboardInterrupt:
         print("Shutting down...")
+    except FloodWait as e:
+        # Telegram ka wait time + 10 seconds extra safety buffer
+        wait_time = e.value + 20
+        print(f"⏳ FloodWait detect hua! Telegram ne {e.value}s bola hai, hum {wait_time}s rukenge...")
+        time.sleep(wait_time) 
+        print("🔄 Buffer complete. Restarting now...")
+        sys.exit(1)
     except Exception as e:
         print(f"⚠️ CRITICAL ERROR: {e}")
-        print("⏳ Bot is facing a FloodWait or Server Ban. Sleeping for 15 Minutes to clear limits...")
-        time.sleep(900)  
-        print("🔄 Restarting now...")
         sys.exit(1)
     finally:
         try:
