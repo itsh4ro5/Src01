@@ -23,6 +23,7 @@ import aiofiles
 from config import YT_COOKIES, INSTA_COOKIES
 from mutagen.id3 import ID3, TIT2, TPE1, COMM, APIC
 from mutagen.mp3 import MP3
+from utils.func import IS_PAUSED
  
 logger = logging.getLogger(__name__)
  
@@ -150,7 +151,6 @@ async def process_audio(client, event, url, cookies_env_var=None):
         if temp_cookie_path and os.path.exists(temp_cookie_path):
             os.remove(temp_cookie_path)
  
-@client.on(events.NewMessage(pattern="/adl"))
 @client.on(events.NewMessage(pattern="/adl"))
 async def handler(event):
     from utils.func import IS_PAUSED
