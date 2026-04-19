@@ -53,8 +53,8 @@ async def save_active_users_to_file():
         async with aiofiles.open(ACTIVE_USERS_FILE, 'w') as f:
             await f.write(json.dumps(ACTIVE_USERS))
     except Exception as e:
-            # pass ki jagah ye likho taaki VPS terminal me error dikhe
-            print(f"⚠️ Failed to load plugin '{plugin}': {e}")
+            # Ab ye NameError nahi dega
+            print(f"⚠️ Failed to save active users file: {e}")
 
 async def add_active_batch(user_id: int, batch_info: Dict[str, Any]):
     ACTIVE_USERS[str(user_id)] = batch_info
@@ -737,7 +737,3 @@ async def text_handler(c, m):
         finally:
             await remove_active_batch(uid)
             Z.pop(uid, None)
-            if uid in UC:
-                try: await UC[uid].stop()
-                except: pass
-                UC.pop(uid, None)
