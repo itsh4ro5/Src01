@@ -32,12 +32,11 @@ API_ID = os.getenv("API_ID", "")
 API_HASH = os.getenv("API_HASH", "")
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 MONGO_DB = os.getenv("MONGO_DB", "")
-owner_id_env = os.environ.get("OWNER_ID", "8354075054") # Default ID backup ke liye
+owner_id_env = os.environ.get("OWNER_ID", "1234567890") # Default ID backup ke liye
 OWNER_ID = [int(i.strip()) for i in owner_id_env.split(",") if i.strip()]
 DB_NAME = os.getenv("DB_NAME", "")
 LOG_GROUP = int(os.getenv("LOG_GROUP", "-1001234567890")) # <-- Yahan apna ID daalein
 STRING = os.getenv("STRING", None) # optional
-LOG_GROUP = int(os.getenv("LOG_GROUP", "-1003604603493")) # optional with -100
 FORCE_SUB = int(os.getenv("FORCE_SUB", "-1002556423278")) # optional with -100
 MASTER_KEY = os.getenv("MASTER_KEY", "gK8HzLfT9QpViJcYeB5wRa3DmN7P2xUq") # for session encryption
 IV_KEY = os.getenv("IV_KEY", "s7Yx5CpVmE3F") # for decryption
@@ -47,3 +46,28 @@ FREEMIUM_LIMIT = int(os.getenv("FREEMIUM_LIMIT", "10"))
 PREMIUM_LIMIT = int(os.getenv("PREMIUM_LIMIT", "10000"))
 JOIN_LINK = os.getenv("JOIN_LINK", "https://t.me/+MdyINnB7oNxjYWJl") # this link for start command message
 ADMIN_CONTACT = os.getenv("ADMIN_CONTACT", "https://t.me/H4R_Contact_bot")
+
+# ════════════════════════════════════════════════════════════════════════════════
+# ░ PREMIUM PLANS CONFIGURATION
+# ════════════════════════════════════════════════════════════════════════════════
+
+P0 = {
+    "d": {
+        "s": int(os.getenv("PLAN_D_S", 1)),
+        "du": int(os.getenv("PLAN_D_DU", 1)),
+        "u": os.getenv("PLAN_D_U", "days"),
+        "l": os.getenv("PLAN_D_L", "Daily"),
+    },
+    "w": {
+        "s": int(os.getenv("PLAN_W_S", 3)),
+        "du": int(os.getenv("PLAN_W_DU", 1)),
+        "u": os.getenv("PLAN_W_U", "weeks"),
+        "l": os.getenv("PLAN_W_L", "Weekly"),
+    },
+    "m": {
+        "s": int(os.getenv("PLAN_M_S", 5)),
+        "du": int(os.getenv("PLAN_M_DU", 1)),
+        "u": os.getenv("PLAN_M_U", "month"),
+        "l": os.getenv("PLAN_M_L", "Monthly"),
+    },
+}
