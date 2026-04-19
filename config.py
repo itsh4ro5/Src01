@@ -44,8 +44,8 @@ YT_COOKIES = os.getenv("YT_COOKIES", YTUB_COOKIES)
 INSTA_COOKIES = os.getenv("INSTA_COOKIES", INST_COOKIES)
 FREEMIUM_LIMIT = int(os.getenv("FREEMIUM_LIMIT", "10"))
 PREMIUM_LIMIT = int(os.getenv("PREMIUM_LIMIT", "10000"))
-JOIN_LINK = os.getenv("JOIN_LINK", "https://t.me/+MdyINnB7oNxjYWJl") # this link for start command message
-ADMIN_CONTACT = os.getenv("ADMIN_CONTACT", "https://t.me/H4R_Contact_bot")
+JOIN_LINK = os.getenv("JOIN_LINK", "") # this link for start command message
+ADMIN_CONTACT = os.getenv("ADMIN_CONTACT", "")
 WEB_URL = os.getenv("WEB_URL", "")
 # ════════════════════════════════════════════════════════════════════════════════
 # ░ PREMIUM PLANS CONFIGURATION
