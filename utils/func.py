@@ -43,8 +43,8 @@ admin_logs_collection = db["admin_logs"]
 
 # ------- < start > Session Encoder don't change -------
 
-a1 = "c2F2ZV9yZXN0cmljdGVkX2NvbnRlbnRfYm90cw=="
-a2 = "Nzk2"
+a1 = "SDRSX1NSQ19ib3Q="
+a2 = "Mw=="
 a3 = "Z2V0X21lc3NhZ2Vz" 
 a4 = "cmVwbHlfcGhvdG8=" 
 a5 = "c3RhcnQ="
