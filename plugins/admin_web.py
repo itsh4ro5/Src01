@@ -2,7 +2,7 @@ import string
 import random
 from telethon import events
 from shared_client import client as bot_client
-from config import OWNER_ID
+from config import OWNER_ID, WEB_URL
 
 # 👇 is_premium_user ko bhi import kar liya gaya hai
 from utils.func import admin_auth_collection, is_private_chat, get_display_name, is_premium_user
@@ -48,6 +48,6 @@ async def generate_pass_handler(event):
         f"🔐 **{role_tag} - Login Details Generated** 🔐\n\n"
         f"👤 **Your Telegram ID:** `{user_id}`\n"
         f"🔑 **Your Password:** `{new_password}`\n\n"
-        f"🌐 **Dashboard URL:** `https://jai1787-src.hf.space`\n\n"
+        f"🌐 **Dashboard URL:** `{WEB_URL}/admin`\n\n"
         f"⚠️ *Ye password jab chahein /webpass bhej kar reset kar sakte hain.*"
     )
