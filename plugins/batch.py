@@ -1,6 +1,7 @@
 import os, re, time, asyncio, json, logging
 import random
 import aiofiles
+from utils.func import db
 from motor.motor_asyncio import AsyncIOMotorClient
 from pyrogram import Client, filters
 from pyrogram.types import Message
@@ -31,13 +32,12 @@ ACTIVE_USERS_FILE = "active_users.json"
 LAST_UPDATE_TIME = {}
 
 try:
-    db_client = AsyncIOMotorClient(MONGO_DB)
-    db = db_client[DB_NAME]
+    # Ab hum global db connection use kar rahe hain, direct func.py se
     cache_col = db["file_cache"]
-    logger.info("✅ MongoDB File Cache connected successfully!")
+    logger.info("✅ MongoDB File Cache connected from global pool!")
 except Exception as e:
     cache_col = None
-    logger.warning("⚠️ MongoDB connection failed. Caching disabled.")
+    logger.warning("⚠️ MongoDB caching disabled.")
 
 def load_active_users():
     try:
