@@ -48,6 +48,6 @@ async def generate_pass_handler(event):
         f"🔐 **{role_tag} - Login Details Generated** 🔐\n\n"
         f"👤 **Your Telegram ID:** `{user_id}`\n"
         f"🔑 **Your Password:** `{new_password}`\n\n"
-        f"🌐 **Dashboard URL:** `https://your-huggingface-space-url.hf.space/admin`\n\n"
+        f"🌐 **Dashboard URL:** `https://jai1787-src.hf.space`\n\n"
         f"⚠️ *Ye password jab chahein /webpass bhej kar reset kar sakte hain.*"
     )
