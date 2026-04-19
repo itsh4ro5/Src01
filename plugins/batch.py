@@ -697,7 +697,7 @@ async def text_handler(c, m):
                 
                 await update_batch_progress(uid, j, success)
                 
-                mid = int(s) + j
+                mid = int(Z[uid]['sid']) + j
                 try:
                     target_chat_id = m.chat.id
                     msg = await get_msg(ubot, uc, i, mid, lt)
