@@ -718,22 +718,22 @@ async def text_handler(c, m):
                     except: pass
                 
                 if n > 1:
-                    if (j + 1) % 20 == 0:
-                        try: await safe_status_edit(c, uid, pt.id, "⏳ Cooling down for 90 seconds to prevent FloodWait...")
-                        except: pass
-                        await asyncio.sleep(90)
-                    else:
-                        delay_time = random.uniform(5.5, 9.5)
-                        try: await safe_status_edit(c, uid, pt.id, f'Sleeping for {delay_time:.2f}s to act like human...')
-                        except: pass
-                        await asyncio.sleep(delay_time)
+                    delay_time = random.uniform(17.5, 35.8)
+                    try: await pt.edit(f'Sleeping for {delay_time:.2f}s to act like human...')
+                    except: pass
+                    await asyncio.sleep(delay_time)
             
-            if success > 0 or j+1 == n:
-                admin_name = get_display_name(m.from_user)
-                await log_admin_activity(uid, admin_name, "Batch Completed", f"From: {source_display} ➡️ To: {dest_display} ({success}/{n} Files)")
-            
-            if j+1 == n:
+            # 🟢 Yeh dono 'if' lines exactly 'for' ke theek niche aligned honi chahiye
+            if success > 0 or j + 1 == n:
+                try:
+                    admin_name = getattr(m.from_user, "first_name", "Admin")
+                    await log_admin_activity(uid, admin_name, "Batch Completed", f"({success}/{n} Files)")
+                except:
+                    pass
+
+            if j + 1 == n:
                 await m.reply_text(f'Batch Completed ✅ Success: {success}/{n}')
+                
         finally:
             await remove_active_batch(uid)
             Z.pop(uid, None)
