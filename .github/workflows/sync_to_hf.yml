@@ -1,0 +1,23 @@
+name: Sync to Hugging Face hub
+on:
+  push:
+    branches: [main] # Agar aapki branch ka naam 'master' hai toh yahan 'master' likhein
+
+  # Manually run karne ke liye
+  workflow_dispatch:
+
+jobs:
+  sync-to-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          lfs: true
+      - name: Push to hub
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          # Yahan 'src/src01' ko apne details se replace karein
+          # Agar repository 'Space' hai toh spaces/ likhein, Model hai toh seedha username/repo
+          git clone https://huggingface.co/spaces/jai1787/src main
