@@ -2,11 +2,19 @@ import os
 import sys
 import random
 import time
-import asyncio
+import asynci
 import importlib
+import logging
 import traceback
 from pyrogram.types import BotCommand  
 from pyrogram import idle
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    handlers=[logging.StreamHandler()] 
+)
+logger = logging.getLogger(__name__)
 
 # 🟢 SPEED BOOST: Activate Ultra-Fast Async Engine
 try:
@@ -53,6 +61,8 @@ async def setup_bot_commands():
     except Exception as e:
         print(f"⚠️ Failed to set bot commands: {e}")
 
+
+
 async def load_and_run_plugins():
     plugin_dir = "plugins"
     plugins = [f[:-3] for f in os.listdir(plugin_dir) if f.endswith(".py") and f != "__init__.py"]
@@ -62,17 +72,15 @@ async def load_and_run_plugins():
             importlib.import_module(f"plugins.{plugin}")
             print(f"✅ Loaded plugin: {plugin}")
         except Exception as e:
-            # Ye traceback exact batayega ki file me kahan galti hai
-            print(f"❌ ERROR loading plugin '{plugin}':")
-            traceback.print_exc()
+            logger.error(f"❌ ERROR loading plugin '{plugin}':", exc_info=True)
 
 async def main():
     await start_client()  # Pehle client start karo
     await load_and_run_plugins() # Fir plugins load karo
     await setup_bot_commands()  
-    asyncio.create_task(human_behavior_routine())
+    aasyncio.create_task(human_behavior_routine())
     
-    print("🚀 Bot is Online and Ready to take commands!")
+    logger.info("🚀 Bot is Online and Ready to take commands!")
     await idle()  # Ye bot ko active rakhega saari commands receive karne ke liye
 
 if __name__ == "__main__":
