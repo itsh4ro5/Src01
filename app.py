@@ -2,8 +2,9 @@ import os
 import sys
 import json
 import subprocess
+import psutil
 from datetime import datetime, timedelta
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from pymongo import MongoClient
 from config import MONGO_DB, DB_NAME, OWNER_ID
 
@@ -81,6 +82,25 @@ def login():
             flash("Telegram ID must be a number.", "error")
             
     return render_template("login.html")
+
+# --- 🟢 REAL-TIME SERVER STATS API ---
+@app.route('/api/server_stats')
+def server_stats():
+    try:
+        # VPS ka CPU, RAM aur Disk usage fetch karna (Lightweight)
+        cpu = psutil.cpu_percent(interval=0.1)
+        ram = psutil.virtual_memory().percent
+        disk = psutil.disk_usage('/').percent
+        
+        return jsonify({
+            "status": "success",
+            "cpu": cpu,
+            "ram": ram,
+            "disk": disk
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+# -------------------------------------
 
 @app.route("/dashboard")
 def dashboard():
