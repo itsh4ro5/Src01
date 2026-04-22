@@ -41,7 +41,7 @@ async def stop_autosync(c, m):
 
 # --- 🟢 GLOBAL LISTENER FOR NEW POSTS ---
 # Ye background me dekhta rahega ki kya kisi source me naya message aaya hai
-@X.on_message(filters.channel & ~filters.edited, group=5)
+@X.on_message(filters.channel, group=5)
 async def live_cloner_listener(c, m):
     chat_id = str(m.chat.id)
     
