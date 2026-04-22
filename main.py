@@ -2,7 +2,7 @@ import os
 import sys
 import random
 import time
-import asynci
+import asyncio
 import importlib
 import logging
 import traceback
