@@ -175,7 +175,10 @@ async def terms(client, message):
 @app.on_message(filters.command("plan") & filters.private)
 async def plan(client, message):
     plan_text = (
-        "> 💰 **Premium Price**:\n\n Starting from $2 or 200 INR accepted via **__Amazon Gift Card__** (terms and conditions apply).\n"
+        "> 💰 **Premium Price (Telegram Stars ⭐)**:\n\n"
+        "🌟 **1 Day Plan:** 5 Stars\n"
+        "🌟 **Weekly Plan:** 20 Stars\n"
+        "🌟 **Monthly Plan:** 50 Stars\n\n"
         "📥 **Download Limit**: Users can download up to 100,000 files in a single batch command.\n"
         "🛑 **Batch**: You will get two modes /bulk and /batch.\n"
         "   - Users are advised to wait for the process to automatically cancel before proceeding with any downloads or uploads.\n\n"
@@ -193,7 +196,10 @@ async def plan(client, message):
 @app.on_callback_query(filters.regex("see_plan"))
 async def see_plan(client, callback_query):
     plan_text = (
-        "> 💰**Premium Price**\n\n Starting from $2 or 200 INR accepted via **__Amazon Gift Card__** (terms and conditions apply).\n"
+        "> 💰 **Premium Price (Telegram Stars ⭐)**:\n\n"
+        "🌟 **1 Day Plan:** 5 Stars\n"
+        "🌟 **Weekly Plan:** 20 Stars\n"
+        "🌟 **Monthly Plan:** 50 Stars\n\n"
         "📥 **Download Limit**: Users can download up to 100,000 files in a single batch command.\n"
         "🛑 **Batch**: You will get two modes /bulk and /batch.\n"
         "   - Users are advised to wait for the process to automatically cancel before proceeding with any downloads or uploads.\n\n"
