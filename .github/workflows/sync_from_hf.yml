@@ -1,7 +1,7 @@
 name: Sync from Hugging Face hub
 on:
   schedule:
-    - cron: '*/30 * * * *' # Har 30 minute me check karega. Aap apne hisaab se time set kar sakte hain.
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git remote add hf https://your-hf-username:$HF_TOKEN@huggingface.co/spaces/your-hf-username/your-repo-name
+          git remote add hf https://jai1787:$HF_TOKEN@huggingface.co/spaces/jai1787/src
           git fetch hf main
           git merge hf/main --allow-unrelated-histories
           git push origin main
