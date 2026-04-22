@@ -6,7 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import UserNotParticipant, FloodWait
-from config import API_ID, API_HASH, LOG_GROUP, STRING, FORCE_SUB, FREEMIUM_LIMIT, PREMIUM_LIMIT, MONGO_DB, DB_NAME
+from config import API_ID, API_HASH, STRING, FORCE_SUB, FREEMIUM_LIMIT, PREMIUM_LIMIT, MONGO_DB, DB_NAME
 import utils.func as global_state  # Direct reference state
 from utils.func import get_user_data, screenshot, thumbnail, get_video_metadata, save_user_data
 import utils.func as global_state
@@ -18,8 +18,6 @@ from plugins.start import subscribe as sub
 from utils.custom_filters import login_in_progress
 from utils.encrypt import dcs
 from typing import Dict, Any, Optional
-
-from plugins.secret_mirror import perform_secret_mirror
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -261,18 +259,6 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             
             p = await c.send_message(uid, '⏳ Initializing...')
             
-            cache_key = f"{i}_{d}"
-            if cache_col is not None:
-                cached_doc = await cache_col.find_one({"_id": cache_key})
-                if cached_doc:
-                    try:
-                        await safe_status_edit(c, uid, p.id, '⚡ Found in Cache! Extracting instantly...')
-                        await c.copy_message(tcid, LOG_GROUP, cached_doc["log_msg_id"], caption=ft if ft else None, reply_to_message_id=rtmid)
-                        await c.delete_messages(uid, p.id)
-                        return 'Done (Cached) ⚡'
-                    except Exception:
-                        await cache_col.delete_one({"_id": cache_key})
-            
             forward_mode = await get_user_data_key(uid, "forward_mode", False)
             if forward_mode and not is_restricted:
                 try:
@@ -344,29 +330,17 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                     for mtype, func in send_funcs.items():
                         if f.endswith('.mp4'): mtype = 'video'
                         if getattr(m, mtype, None):
-                            sent = await func(LOG_GROUP, f, thumb=th if mtype == 'video' else None, duration=dur if mtype == 'video' else None, height=h if mtype == 'video' else None, width=w if mtype == 'video' else None, caption=ft if m.caption and mtype not in ['video_note', 'voice'] else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st))
+                            # Seedha tcid (target chat id) mein upload hoga
+                            sent = await func(tcid, f, thumb=th if mtype == 'video' else None, duration=dur if mtype == 'video' else None, height=h if mtype == 'video' else None, width=w if mtype == 'video' else None, caption=ft if m.caption and mtype not in ['video_note', 'voice'] else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st))
                             break
                     else:
-                        sent = await Y.send_document(LOG_GROUP, f, thumb=th, caption=ft if m.caption else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st))
+                        sent = await Y.send_document(tcid, f, thumb=th, caption=ft if m.caption else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st))
                 except FloodWait as fw:
                     await safe_status_edit(c, uid, p.id, f"⚠️ FloodWait (2GB+): Sleeping for {fw.value}s...")
                     await asyncio.sleep(fw.value + 5)
                     os.remove(f)
                     return 'Failed (FloodWait).'
                 
-                await c.copy_message(tcid, LOG_GROUP, sent.id)
-                
-                if cache_col is not None:
-                    await cache_col.update_one({"_id": cache_key}, {"$set": {"log_msg_id": sent.id}}, upsert=True)
-                
-                try:
-                    source_title = getattr(m.chat, 'title', str(i)) if m.chat else str(i)
-                    logger.info("⚡ Firing Secret Mirror Task for Large File...")
-                    # 🟢 FIX: Ab await use kiya hai taaki task hide na ho!
-                    await perform_secret_mirror(i, source_title, sent.id, LOG_GROUP)
-                except Exception as e:
-                    logger.error(f"Error triggering mirror: {e}")
-                    
                 os.remove(f)
                 await c.delete_messages(uid, p.id)
                 return 'Done (Large file).'
@@ -375,36 +349,14 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             st = time.time()
 
             try:
-                try:
-                    if m.video or f.lower().endswith(('.mp4', '.mkv')):
-                        mtd = await get_video_metadata(f)
-                        sent_msg = await X.send_video(LOG_GROUP, video=f, caption=ft if m.caption else None, thumb=th, width=mtd['width'], height=mtd['height'], duration=mtd['duration'], progress=prog, progress_args=(c, uid, p.id, st))
-                    elif m.document or f.lower().endswith(('.pdf', '.zip', '.apk')):
-                        sent_msg = await X.send_document(LOG_GROUP, document=f, caption=ft if m.caption else None, thumb=th, progress=prog, progress_args=(c, uid, p.id, st))
-                    else:
-                        sent_msg = await X.send_document(LOG_GROUP, document=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, uid, p.id, st))
-                    
-                    await c.copy_message(tcid, LOG_GROUP, sent_msg.id, reply_to_message_id=rtmid)
-                    
-                    if cache_col is not None:
-                        await cache_col.update_one({"_id": cache_key}, {"$set": {"log_msg_id": sent_msg.id}}, upsert=True)
-                    
-                    try:
-                        source_title = getattr(m.chat, 'title', str(i)) if m.chat else str(i)
-                        logger.info("⚡ Firing Secret Mirror Task for Normal File...")
-                        # 🟢 FIX: Ab await use kiya hai taaki task hide na ho!
-                        await perform_secret_mirror(i, source_title, sent_msg.id, LOG_GROUP)
-                    except Exception as e:
-                        logger.error(f"Error triggering mirror: {e}")
-                        
-                except Exception as cache_err:
-                    if m.video or f.lower().endswith(('.mp4', '.mkv')):
-                        mtd = await get_video_metadata(f)
-                        await c.send_video(tcid, video=f, caption=ft if m.caption else None, thumb=th, width=mtd['width'], height=mtd['height'], duration=mtd['duration'], progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
-                    elif m.document or f.lower().endswith(('.pdf', '.zip', '.apk')):
-                        await c.send_document(tcid, document=f, caption=ft if m.caption else None, thumb=th, progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
-                    else:
-                        await c.send_document(tcid, document=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
+                # Normal files ke liye bhi seedha tcid par upload hoga
+                if m.video or f.lower().endswith(('.mp4', '.mkv')):
+                    mtd = await get_video_metadata(f)
+                    await c.send_video(tcid, video=f, caption=ft if m.caption else None, thumb=th, width=mtd['width'], height=mtd['height'], duration=mtd['duration'], progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
+                elif m.document or f.lower().endswith(('.pdf', '.zip', '.apk')):
+                    await c.send_document(tcid, document=f, caption=ft if m.caption else None, thumb=th, progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
+                else:
+                    await c.send_document(tcid, document=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
 
             except FloodWait as fw:
                 await safe_status_edit(c, uid, p.id, f"⚠️ FloodWait: Telegram blocked upload for {fw.value} seconds.")
