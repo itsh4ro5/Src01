@@ -29,17 +29,6 @@ except ImportError:
 from shared_client import start_client, app
 import utils.func as global_state
 
-async def human_behavior_routine():
-    while True:
-        active_time = random.uniform(10500.5, 11000.2)
-        await asyncio.sleep(active_time)
-        print("Taking a ~20-minute human-like break to prevent bans...")
-        global_state.IS_PAUSED = True
-        sleep_time = random.uniform(1150.7, 1250.3)
-        await asyncio.sleep(sleep_time)
-        print("Waking up from break...")
-        global_state.IS_PAUSED = False
-
 async def setup_bot_commands():
     try:
         await app.set_bot_commands([
@@ -78,7 +67,6 @@ async def main():
     await start_client()  # Pehle client start karo
     await load_and_run_plugins() # Fir plugins load karo
     await setup_bot_commands()  
-    aasyncio.create_task(human_behavior_routine())
     
     logger.info("🚀 Bot is Online and Ready to take commands!")
     await idle()  # Ye bot ko active rakhega saari commands receive karne ke liye
