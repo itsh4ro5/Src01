@@ -52,19 +52,19 @@ WEB_URL = os.getenv("WEB_URL", "")
 
 P0 = {
     "d": {
-        "s": int(os.getenv("PLAN_D_S", 1)),
+        "s": int(os.getenv("PLAN_D_S", 5)),       # 1 Day = 5 Stars
         "du": int(os.getenv("PLAN_D_DU", 1)),
         "u": os.getenv("PLAN_D_U", "days"),
         "l": os.getenv("PLAN_D_L", "Daily"),
     },
     "w": {
-        "s": int(os.getenv("PLAN_W_S", 3)),
+        "s": int(os.getenv("PLAN_W_S", 20)),      # 1 Week = 20 Stars
         "du": int(os.getenv("PLAN_W_DU", 1)),
         "u": os.getenv("PLAN_W_U", "weeks"),
         "l": os.getenv("PLAN_W_L", "Weekly"),
     },
     "m": {
-        "s": int(os.getenv("PLAN_M_S", 5)),
+        "s": int(os.getenv("PLAN_M_S", 50)),      # 1 Month = 50 Stars
         "du": int(os.getenv("PLAN_M_DU", 1)),
         "u": os.getenv("PLAN_M_U", "month"),
         "l": os.getenv("PLAN_M_L", "Monthly"),
