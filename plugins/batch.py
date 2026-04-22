@@ -173,12 +173,13 @@ async def get_uclient(uid):
             return ubot if ubot else Y
     return Y
 
-async def prog(c, t, C, h, m, st):
+async def prog(c, t, C, h, m, st, action="Downloading......."):
     global LAST_UPDATE_TIME
     p = c / t * 100
     now = time.time()
     
-    if m not in LAST_UPDATE_TIME or (now - LAST_UPDATE_TIME.get(m, 0)) >= 15 or p >= 100:
+    # 🟢 Update time 15 seconds se hata kar 4 seconds kar diya hai (Fast Response)
+    if m not in LAST_UPDATE_TIME or (now - LAST_UPDATE_TIME.get(m, 0)) >= 10 or p >= 100:
         LAST_UPDATE_TIME[m] = now
         c_mb = c / (1024 * 1024)
         t_mb = t / (1024 * 1024)
@@ -186,7 +187,8 @@ async def prog(c, t, C, h, m, st):
         speed = c / (now - st) / (1024 * 1024) if now > st else 0
         eta = time.strftime('%M:%S', time.gmtime((t - c) / (speed * 1024 * 1024))) if speed > 0 else '00:00'
         
-        text = f"__**H4R SRC...**__\n\n{bar}\n\n⚡**__Completed__**: {c_mb:.2f} MB / {t_mb:.2f} MB\n📊 **__Done__**: {p:.2f}%\n🚀 **__Speed__**: {speed:.2f} MB/s\n⏳ **__ETA__**: {eta}\n\n**__Powered by H4R__**"
+        # 🟢 Action (Downloading/Uploading) text dynamic ho gaya hai
+        text = f"__**H4R SRC {action}**__\n\n{bar}\n\n⚡**__Completed__**: {c_mb:.2f} MB / {t_mb:.2f} MB\n📊 **__Done__**: {p:.2f}%\n🚀 **__Speed__**: {speed:.2f} MB/s\n⏳ **__ETA__**: {eta}\n\n**__Powered by H4R__**"
         
         async def safe_edit():
             try: await C.edit_message_text(h, m, text)
@@ -285,7 +287,7 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
     
             try:
                 client_to_use = getattr(m, '_client', u if u else c)
-                f = await client_to_use.download_media(m, file_name=c_name, progress=prog, progress_args=(c, uid, p.id, st))
+                f = await client_to_use.download_media(m, file_name=c_name, progress=prog, progress_args=(c, uid, p.id, st, "Downloading......."))
             except FloodWait as fw:
                 await safe_status_edit(c, uid, p.id, f"⚠️ FloodWait: Sleeping for {fw.value} seconds.")
                 await asyncio.sleep(fw.value + 5)
@@ -330,11 +332,11 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                     for mtype, func in send_funcs.items():
                         if f.endswith('.mp4'): mtype = 'video'
                         if getattr(m, mtype, None):
-                            # Seedha tcid (target chat id) mein upload hoga
-                            sent = await func(tcid, f, thumb=th if mtype == 'video' else None, duration=dur if mtype == 'video' else None, height=h if mtype == 'video' else None, width=w if mtype == 'video' else None, caption=ft if m.caption and mtype not in ['video_note', 'voice'] else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st))
+                            # 🟢 UPLOADING TEXT ADDED
+                            sent = await func(tcid, f, thumb=th if mtype == 'video' else None, duration=dur if mtype == 'video' else None, height=h if mtype == 'video' else None, width=w if mtype == 'video' else None, caption=ft if m.caption and mtype not in ['video_note', 'voice'] else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st, "Uploading....."))
                             break
                     else:
-                        sent = await Y.send_document(tcid, f, thumb=th, caption=ft if m.caption else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st))
+                        sent = await Y.send_document(tcid, f, thumb=th, caption=ft if m.caption else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st, "Uploading....."))
                 except FloodWait as fw:
                     await safe_status_edit(c, uid, p.id, f"⚠️ FloodWait (2GB+): Sleeping for {fw.value}s...")
                     await asyncio.sleep(fw.value + 5)
@@ -349,14 +351,14 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             st = time.time()
 
             try:
-                # Normal files ke liye bhi seedha tcid par upload hoga
+                # 🟢 NORMAL FILES: UPLOADING TEXT ADDED
                 if m.video or f.lower().endswith(('.mp4', '.mkv')):
                     mtd = await get_video_metadata(f)
-                    await c.send_video(tcid, video=f, caption=ft if m.caption else None, thumb=th, width=mtd['width'], height=mtd['height'], duration=mtd['duration'], progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
+                    await c.send_video(tcid, video=f, caption=ft if m.caption else None, thumb=th, width=mtd['width'], height=mtd['height'], duration=mtd['duration'], progress=prog, progress_args=(c, uid, p.id, st, "Uploading....."), reply_to_message_id=rtmid)
                 elif m.document or f.lower().endswith(('.pdf', '.zip', '.apk')):
-                    await c.send_document(tcid, document=f, caption=ft if m.caption else None, thumb=th, progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
+                    await c.send_document(tcid, document=f, caption=ft if m.caption else None, thumb=th, progress=prog, progress_args=(c, uid, p.id, st, "Uploading....."), reply_to_message_id=rtmid)
                 else:
-                    await c.send_document(tcid, document=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, uid, p.id, st), reply_to_message_id=rtmid)
+                    await c.send_document(tcid, document=f, caption=ft if m.caption else None, progress=prog, progress_args=(c, uid, p.id, st, "Uploading....."), reply_to_message_id=rtmid)
 
             except FloodWait as fw:
                 await safe_status_edit(c, uid, p.id, f"⚠️ FloodWait: Telegram blocked upload for {fw.value} seconds.")
