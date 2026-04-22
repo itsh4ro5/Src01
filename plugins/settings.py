@@ -4,10 +4,12 @@ import os
 import asyncio
 import string
 import random
-import requests  # 🟢 FIX: Changed from aiohttp to requests to prevent ImportError crash
+import requests# 🟢 FIX: Changed from aiohttp to requests to prevent ImportError crash
+from pyrogram import filters
 from shared_client import client as gf
+from shared_client import app as X
 from config import OWNER_ID
-from utils.func import get_user_data_key, save_user_data, users_collection
+from utils.func import get_user_data_key, save_user_data, users_collection, is_premium_user
 
 try:
     from theme_config import AVAILABLE_FONTS, AVAILABLE_COLORS, FONT_DIR
@@ -270,6 +272,47 @@ async def handle_conversation_input(event):
     if user_id in active_conversations:
         del active_conversations[user_id]
 
+# --- 💎 PREMIUM FEATURE: CUSTOM WATERMARK ---
+@X.on_message(filters.command("setwm"))
+async def set_premium_watermark(c, m):
+    uid = m.from_user.id
+    
+    # 🟢 Premium Check
+    if not await is_premium_user(uid):
+        return await m.reply_text("❌ **Premium Feature!**\nApna custom video watermark lagane ke liye Premium kharidein.")
+        
+    if len(m.command) < 2:
+        return await m.reply_text("⚠️ **Format:** `/setwm Apna Channel Naam`\n\nIsse aapki download hone wali har video ke thumbnail me aapka watermark lagega!")
+        
+    watermark_text = m.text.split(None, 1)[1]
+    await save_user_data(uid, "watermark", watermark_text)
+    await m.reply_text(f"✅ **VIP Watermark Set!**\nAb aapki videos par `{watermark_text}` likh kar aayega.")
+
+@X.on_message(filters.command("remwm"))
+async def remove_premium_watermark(c, m):
+    uid = m.from_user.id
+    if not await is_premium_user(uid):
+        return await m.reply_text("❌ **Premium Feature!**")
+        
+    await save_user_data(uid, "watermark", "")
+    await m.reply_text("✅ Custom Watermark hata diya gaya hai.")
+
+# --- 💎 PREMIUM FEATURE: CUSTOM CAPTION FOOTER ---
+@X.on_message(filters.command("setcap"))
+async def set_premium_caption(c, m):
+    uid = m.from_user.id
+    
+    if not await is_premium_user(uid):
+        return await m.reply_text("❌ **Premium Feature!**\nCopyright se bachne aur apni branding lagane ke liye Premium kharidein.")
+        
+    if len(m.command) < 2:
+        return await m.reply_text("⚠️ **Format:** `/setcap Join @MyChannel`\n\nYe text aapki har download/forward hui file ke neeche automatically lag jayega.")
+        
+    caption_text = m.text.split(None, 1)[1]
+    await save_user_data(uid, "caption", f"\n\n{caption_text}")
+    await m.reply_text(f"✅ **VIP Caption Set!**\nAb har file ke neeche aapki branding aayegi.")
+
+    
 async def handle_setchat(event, user_id):
     try:
         chat_id = event.text.strip()
