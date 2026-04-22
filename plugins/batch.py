@@ -226,14 +226,6 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
     tcid = d
     rtmid = None
     
-    cfg_chat = await get_user_data_key(uid, 'chat_id', None)
-    if cfg_chat:
-        if '/' in cfg_chat:
-            parts = cfg_chat.split('/', 1)
-            tcid = int(parts[0])
-            rtmid = int(parts[1]) if len(parts) > 1 else None
-        else:
-            tcid = int(cfg_chat)
 
     try:
         if m.media:
