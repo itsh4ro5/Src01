@@ -635,15 +635,18 @@ async def text_handler(c, m):
         })
         
         try:
+            batch_start_time = time.time()  # 🟢 Task shuru hone ka time note kar liya
             for j in range(n):
-                is_paused_msg_sent = False
-                while getattr(global_state, "IS_PAUSED", False):
-                    if not is_paused_msg_sent:
-                        try: 
-                            await pt.edit('💤 Taking a human-like break... Paused for ~20 mins.')
-                            is_paused_msg_sent = True
-                        except: pass
-                    await asyncio.sleep(random.uniform(55.5, 65.5))
+                # --- 🟢 3-HOUR CONTINUOUS USAGE ANTI-BAN ---
+                # Agar task lagatar 3 ghante (10800 seconds) se chal raha hai, toh usi user ke liye 20 min ka break lo
+                if time.time() - batch_start_time > 10800:
+                    break_duration = random.uniform(1150.5, 1250.2) # Lagbhag 20 minute
+                    try: 
+                        await pt.edit(f'💤 Anti-Ban: Lagatar 3 ghante se extract ho raha hai. Account safe rakhne ke liye {int(break_duration/60)} min ka break le raha hu...')
+                    except: pass
+                    await asyncio.sleep(break_duration)
+                    batch_start_time = time.time()  # 🟢 Break ke baad timer wapas reset kar do
+                # ---------------------------------------------
                 
                 if should_cancel(uid):
                     await pt.edit(f'Cancelled at {j}/{n}. Success: {success}')
