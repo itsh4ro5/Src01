@@ -35,7 +35,6 @@ MONGO_DB = os.getenv("MONGO_DB", "")
 owner_id_env = os.environ.get("OWNER_ID", "1234567890") # Default ID backup ke liye
 OWNER_ID = [int(i.strip()) for i in owner_id_env.split(",") if i.strip()]
 DB_NAME = os.getenv("DB_NAME", "")
-LOG_GROUP = int(os.getenv("LOG_GROUP", "-1001234567890")) # <-- Yahan apna ID daalein
 STRING = os.getenv("STRING", None) # optional
 FORCE_SUB = int(os.getenv("FORCE_SUB", "-1002556423278")) # optional with -100
 MASTER_KEY = os.getenv("MASTER_KEY", "gK8HzLfT9QpViJcYeB5wRa3DmN7P2xUq") # for session encryption
