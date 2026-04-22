@@ -50,7 +50,42 @@ async def setup_bot_commands():
     except Exception as e:
         print(f"⚠️ Failed to set bot commands: {e}")
 
-
+# --- 🟢 SMART VPS CLEANUP ROUTINE ---
+async def auto_cleanup_routine():
+    """Har 12 ghante me kachra saaf karega taaki VPS full na ho"""
+    while True:
+        try:
+            logger.info("🧹 Starting VPS Auto-Cleanup routine...")
+            current_time = time.time()
+            deleted_files = 0
+            freed_space = 0
+            
+            # Temporary files ki extensions
+            exts = ('.mp4', '.mkv', '.avi', '.pdf', '.zip', '.jpg', '.png', '.mp3', '.webm')
+            
+            # Current directory me saari files check karega
+            for filename in os.listdir('.'):
+                if filename.lower().endswith(exts):
+                    file_path = os.path.join('.', filename)
+                    # Agar file 24 ghante (86400 seconds) se purani hai
+                    if os.path.isfile(file_path) and (current_time - os.path.getmtime(file_path)) > 86400:
+                        file_size = os.path.getsize(file_path)
+                        os.remove(file_path)
+                        deleted_files += 1
+                        freed_space += file_size
+            
+            if deleted_files > 0:
+                freed_mb = freed_space / (1024 * 1024)
+                logger.info(f"✅ Cleanup Done: Deleted {deleted_files} old files. Freed {freed_mb:.2f} MB space.")
+            else:
+                logger.info("✅ Cleanup Done: No old files found. Server is clean!")
+                
+        except Exception as e:
+            logger.error(f"❌ Cleanup Error: {e}")
+            
+        # Agli baar 12 ghante (43200 seconds) baad chalega
+        await asyncio.sleep(43200)
+# ------------------------------------
 
 async def load_and_run_plugins():
     plugin_dir = "plugins"
@@ -67,6 +102,9 @@ async def main():
     await start_client()  # Pehle client start karo
     await load_and_run_plugins() # Fir plugins load karo
     await setup_bot_commands()  
+    
+    # 🟢 Start the Background Cleanup Task
+    asyncio.create_task(auto_cleanup_routine())
     
     logger.info("🚀 Bot is Online and Ready to take commands!")
     await idle()  # Ye bot ko active rakhega saari commands receive karne ke liye
