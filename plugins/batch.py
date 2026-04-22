@@ -553,113 +553,145 @@ async def text_handler(c, m):
     elif s == 'count':
         maxlimit = PREMIUM_LIMIT if await is_premium_user(uid) else FREEMIUM_LIMIT
         
-        if m.text.isdigit():
-            count = int(m.text)
+        if m.text.isdigit(): count = int(m.text)
         else:
             end_i, end_d, end_lt = E(m.text)
-            if not end_i or not end_d:
-                await m.reply_text('❌ Please enter a valid number or a valid Telegram ending link.')
-                return
-            
+            if not end_i or not end_d: return await m.reply_text('❌ Please enter a valid number or a valid Telegram ending link.')
             start_d = int(Z[uid]['sid'])
             end_d = int(end_d)
-            
-            if str(end_i) != str(Z[uid]['cid']):
-                await m.reply_text('❌ Ending link usi channel/group ka hona chahiye jiska starting link tha!')
-                return
-                
-            if end_d < start_d:
-                await m.reply_text('❌ Ending message ID starting message ID se bada ya barabar hona chahiye!')
-                return
-                
+            if str(end_i) != str(Z[uid]['cid']): return await m.reply_text('❌ Ending link usi channel/group ka hona chahiye jiska starting link tha!')
+            if end_d < start_d: return await m.reply_text('❌ Ending ID starting ID se bada hona chahiye!')
             count = (end_d - start_d) + 1
 
-        if count > maxlimit:
-            await m.reply_text(f'❌ Maximum limit is {maxlimit}. Aap {count} messages nikalne ki koshish kar rahe hain.')
-            return
+        if count > maxlimit: return await m.reply_text(f'❌ Maximum limit is {maxlimit}.')
 
-        Z[uid].update({'step': 'process', 'did': str(m.chat.id), 'num': count})
+        # 🟢 STEP 1: WIZARD START
+        Z[uid].update({'step': 'ask_remove_words', 'num': count})
+        await m.reply_text("📝 **Step 1/4: Words to Remove**\nEnter words you want to remove from caption (comma separated).\n\n🔹 Type `/d` for Default (Settings wale)\n🔹 Type `0` for Previous (Pichle batch wale)")
+        return
+
+    elif s == 'ask_remove_words':
+        text = m.text.strip()
+        Z[uid]['custom_remove'] = "DEFAULT" if text == '/d' else "PREVIOUS" if text == '0' else [w.strip() for w in text.split(',')]
+        Z[uid]['step'] = 'ask_replace_words'
+        await m.reply_text("🔄 **Step 2/4: Words to Replace**\nEnter words to rename. Format: `old_word | new_word`\n\n🔹 Type `/d` for Default\n🔹 Type `0` for Previous")
+        return
+
+    elif s == 'ask_replace_words':
+        text = m.text.strip()
+        if text == '/d': Z[uid]['custom_replace'] = "DEFAULT"
+        elif text == '0': Z[uid]['custom_replace'] = "PREVIOUS"
+        else:
+            try:
+                old_w, new_w = text.split('|')
+                Z[uid]['custom_replace'] = {old_w.strip(): new_w.strip()}
+            except: Z[uid]['custom_replace'] = {}
+            
+        Z[uid]['step'] = 'ask_watermark'
+        await m.reply_text("🖼️ **Step 3/4: Thumbnail Watermark**\nEnter the text for Video Watermark.\n\n🔹 Type `/d` for Default\n🔹 Type `0` for Previous")
+        return
+
+    elif s == 'ask_watermark':
+        text = m.text.strip()
+        Z[uid]['custom_wm'] = "DEFAULT" if text == '/d' else "PREVIOUS" if text == '0' else text
+        Z[uid]['step'] = 'ask_target_chat'
+        await m.reply_text("🎯 **Step 4/4: Target Channel ID**\nEnter the Chat ID where you want to send files (e.g., -100123456).\n\n🔹 Type `/d` for Default Chat ID\n🔹 Type `0` for Previous Chat ID")
+        return
+
+    elif s == 'ask_target_chat':
+        text = m.text.strip()
+        Z[uid]['custom_chat'] = "DEFAULT" if text == '/d' else "PREVIOUS" if text == '0' else text
+        Z[uid]['step'] = 'process'
+
+        # 🟢 STEP 5: RESOLVING ALL INPUTS & SAVING 'PREVIOUS' DATA
         i, s_id, n, lt = Z[uid]['cid'], Z[uid]['sid'], Z[uid]['num'], Z[uid]['lt']
         success = 0
-
-        pt = await m.reply_text('Processing batch...')
+        pt = await m.reply_text('⚙️ Validating inputs and starting batch...')
+        
         uc = await get_uclient(uid)
         ubot = UB.get(uid)
-        
-        if not uc or not ubot:
-            await pt.edit('Missing client setup')
-            Z.pop(uid, None)
-            return
-            
-        if is_user_active(uid):
-            await pt.edit('Active task exists')
-            Z.pop(uid, None)
-            return
-        
-        target_chat_id = m.chat.id
-        cfg_chat = await get_user_data_key(uid, 'chat_id', None)
-        if cfg_chat:
-            target_chat_id = int(cfg_chat.split('/')[0]) if '/' in cfg_chat else int(cfg_chat)
-            
-        try:
-            i_str = str(i)
-            possible_ids = [i]
-            if i_str.lstrip('-').isdigit():
-                base_id = i_str.lstrip('-')
-                possible_ids.extend([int(f"-100{base_id}"), int(f"-{base_id}")])
-            
-            s_chat = None
-            for pid in possible_ids:
-                try:
-                    s_chat = await uc.get_chat(pid)
-                    if s_chat: break
-                except Exception: pass
-            
-            source_display = getattr(s_chat, 'title', str(i)) if s_chat else str(i)
-        except: 
-            source_display = str(i)
-            
-        try:
-            d_chat = await ubot.get_chat(target_chat_id)
-            dest_display = getattr(d_chat, 'title', "Private / Bot Chat")
-        except: 
-            dest_display = str(target_chat_id)
+        if not uc or not ubot: return await pt.edit('Missing client setup')
+        if is_user_active(uid): return await pt.edit('Active task exists')
 
+        # --- 1. REMOVE WORDS ---
+        if Z[uid]['custom_remove'] == "DEFAULT":
+            resolved_remove = await get_user_data_key(uid, "delete_words", [])
+        elif Z[uid]['custom_remove'] == "PREVIOUS":
+            resolved_remove = await get_user_data_key(uid, "last_remove", [])
+        else:
+            resolved_remove = Z[uid]['custom_remove']
+            await save_user_data(uid, "last_remove", resolved_remove) # Naya hai toh future ke liye save kar lo
+
+        # --- 2. REPLACE WORDS ---
+        if Z[uid]['custom_replace'] == "DEFAULT":
+            resolved_replace = await get_user_data_key(uid, "replacement_words", {})
+        elif Z[uid]['custom_replace'] == "PREVIOUS":
+            resolved_replace = await get_user_data_key(uid, "last_replace", {})
+        else:
+            resolved_replace = Z[uid]['custom_replace']
+            await save_user_data(uid, "last_replace", resolved_replace)
+
+        # --- 3. WATERMARK ---
+        if Z[uid]['custom_wm'] == "DEFAULT":
+            resolved_wm = await get_user_data_key(uid, "watermark", "")
+        elif Z[uid]['custom_wm'] == "PREVIOUS":
+            resolved_wm = await get_user_data_key(uid, "last_wm", "")
+        else:
+            resolved_wm = Z[uid]['custom_wm']
+            await save_user_data(uid, "last_wm", resolved_wm)
+
+        # --- 4. TARGET CHAT ---
+        if Z[uid]['custom_chat'] == "DEFAULT":
+            cfg_chat = await get_user_data_key(uid, 'chat_id', None)
+            if cfg_chat: 
+                target_chat_id = int(cfg_chat.split('/')[0]) if '/' in cfg_chat else int(cfg_chat)
+            else:
+                target_chat_id = m.chat.id
+        elif Z[uid]['custom_chat'] == "PREVIOUS":
+            last_chat = await get_user_data_key(uid, "last_chat", m.chat.id)
+            target_chat_id = int(last_chat)
+        else:
+            try: 
+                target_chat_id = int(Z[uid]['custom_chat'])
+                await save_user_data(uid, "last_chat", target_chat_id)
+            except:
+                target_chat_id = m.chat.id
+
+        # Package task data
+        task_data = {
+            "remove_list": resolved_remove,
+            "replace_dict": resolved_replace,
+            "watermark": resolved_wm
+        }
+
+        # --- 🟢 FINALLY PROCESSING THE BATCH ---
         await add_active_batch(uid, {
             "total": n, "current": 0, "success": 0,
-            "source": source_display,
-            "destination": dest_display,
-            "source_id": str(i),
-            "dest_id": str(target_chat_id),
+            "source": str(i), "destination": str(target_chat_id),
             "cancel_requested": False, "progress_message_id": pt.id
         })
         
         try:
-            batch_start_time = time.time()  # 🟢 Task shuru hone ka time note kar liya
+            batch_start_time = time.time()
             for j in range(n):
-                # --- 🟢 3-HOUR CONTINUOUS USAGE ANTI-BAN ---
-                # Agar task lagatar 3 ghante (10800 seconds) se chal raha hai, toh usi user ke liye 20 min ka break lo
+                # 🟢 Smart Break (Anti-ban)
                 if time.time() - batch_start_time > 10800:
-                    break_duration = random.uniform(1150.5, 1250.2) # Lagbhag 20 minute
-                    try: 
-                        await pt.edit(f'💤 Anti-Ban: Lagatar 3 ghante se extract ho raha hai. Account safe rakhne ke liye {int(break_duration/60)} min ka break le raha hu...')
+                    break_dur = random.uniform(1150.5, 1250.2)
+                    try: await pt.edit(f'💤 Anti-Ban: Lagatar 3 ghante se extract ho raha hai. Account safe rakhne ke liye {int(break_dur/60)} min ka break le raha hu...')
                     except: pass
-                    await asyncio.sleep(break_duration)
-                    batch_start_time = time.time()  # 🟢 Break ke baad timer wapas reset kar do
-                # ---------------------------------------------
+                    await asyncio.sleep(break_dur)
+                    batch_start_time = time.time()
                 
                 if should_cancel(uid):
                     await pt.edit(f'Cancelled at {j}/{n}. Success: {success}')
                     break
                 
                 await update_batch_progress(uid, j, success)
+                mid = int(s_id) + j
                 
-                mid = int(Z[uid]['sid']) + j
                 try:
-                    target_chat_id = m.chat.id
                     msg = await get_msg(ubot, uc, i, mid, lt)
                     if msg:
-                        task_data = {"watermark": await get_user_data_key(uid, "watermark", "")}
                         res = await process_msg(ubot, uc, msg, target_chat_id, lt, uid, i, task=task_data)
                         if res and isinstance(res, str) and any(x in res for x in ['Done', 'Copied', 'Sent', 'Forwarded']):
                             success += 1
@@ -677,7 +709,7 @@ async def text_handler(c, m):
                     await asyncio.sleep(delay_time)
             
             if j + 1 == n:
-                await m.reply_text(f'Batch Completed ✅ Success: {success}/{n}')
+                await m.reply_text(f'✅ Batch Completed!\n📊 Successfully Processed: {success}/{n}\n🎯 Sent to Chat ID: `{target_chat_id}`')
                 
         finally:
             await remove_active_batch(uid)
