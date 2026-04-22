@@ -12,7 +12,7 @@ app = Client(
     api_id=API_ID, 
     api_hash=API_HASH, 
     bot_token=BOT_TOKEN,
-    max_concurrent_transmissions=3  # Ab speed achanak se jump nahi karegi
+    max_concurrent_transmissions=2  # Ab speed achanak se jump nahi karegi
 )
 
 userbot = Client(
@@ -20,7 +20,7 @@ userbot = Client(
     api_id=API_ID, 
     api_hash=API_HASH, 
     session_string=STRING,
-    max_concurrent_transmissions=3  # Yahan bhi '3' kar diya hai
+    max_concurrent_transmissions=5  # Yahan bhi '3' kar diya hai
 ) if STRING else None
 
 async def start_client():
