@@ -1,9 +1,8 @@
 name: Sync to Hugging Face hub
 on:
   push:
-    branches: [main] # Agar aapki branch ka naam 'master' hai toh yahan 'master' likhein
+    branches: [main]
 
-  # Manually run karne ke liye
   workflow_dispatch:
 
 jobs:
@@ -18,6 +17,4 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          # Yahan 'src/src01' ko apne details se replace karein
-          # Agar repository 'Space' hai toh spaces/ likhein, Model hai toh seedha username/repo
-          git clone https://huggingface.co/spaces/jai1787/src main
+          git push https://jai1787:$HF_TOKEN@huggingface.co/spaces/jai1787/src main
