@@ -1,0 +1,28 @@
+name: Sync from Hugging Face hub
+on:
+  schedule:
+    - cron: '*/30 * * * *' # Har 30 minute me check karega. Aap apne hisaab se time set kar sakte hain.
+  workflow_dispatch:
+
+jobs:
+  sync-from-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          lfs: true
+          
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+      - name: Pull from Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git remote add hf https://your-hf-username:$HF_TOKEN@huggingface.co/spaces/your-hf-username/your-repo-name
+          git fetch hf main
+          git merge hf/main --allow-unrelated-histories
+          git push origin main
