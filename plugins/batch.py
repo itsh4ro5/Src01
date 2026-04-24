@@ -1,6 +1,7 @@
 import os, re, time, asyncio, json, logging
 import random
 import aiofiles
+import shutil
 from utils.func import db
 from motor.motor_asyncio import AsyncIOMotorClient
 from pyrogram import Client, filters
@@ -18,6 +19,7 @@ from plugins.start import subscribe as sub
 from utils.custom_filters import login_in_progress
 from utils.encrypt import dcs
 from typing import Dict, Any, Optional
+from utils.func import copy_header_and_repair
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -293,9 +295,37 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             
             await safe_status_edit(c, uid, p.id, 'Renaming...')
             
-            if m.video or m.audio or m.document:
-                renamed_f = await rename_file(f, uid, p)
-                new_f_name = renamed_f
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # 🟢 NEW: CORRUPTION CHECK & HEADER REPAIR LOGIC
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            if m.video or (isinstance(f, str) and f.lower().endswith(('.mp4', '.mkv', '.webm'))):
+                reference_video_path = f"temp_reference_{uid}.mp4"
+                await safe_status_edit(c, uid, p.id, '🔍 Checking video health...')
+                
+                # Check if video is corrupt using ffprobe
+                check_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", f]
+                proc = await asyncio.create_subprocess_exec(*check_cmd, stdout=asyncio.subprocess.PIPE)
+                stdout, _ = await proc.communicate()
+                is_corrupt = not bool(stdout.decode().strip())
+                
+                if is_corrupt:
+                    if os.path.exists(reference_video_path):
+                        await safe_status_edit(c, uid, p.id, '🛠 Video Crashed! Copying header from previous good video...')
+                        f = await copy_header_and_repair(f, reference_video_path)
+                        if not f:
+                            await c.delete_messages(uid, p.id)
+                            return 'Failed (Unfixable Crash)'
+                    else:
+                        await safe_status_edit(c, uid, p.id, '❌ Skipped: Video is crashed, but no reference video exists yet.')
+                        if os.path.exists(f): os.remove(f)
+                        await c.delete_messages(uid, p.id)
+                        return 'Failed (No Reference)'
+                else:
+                    # Agar video completely healthy hai, toh future corrupt videos ke liye isko reference bana lo
+                    if not os.path.exists(reference_video_path):
+                        shutil.copy2(f, reference_video_path)
+                        logger.info("✅ Reference video saved for future header copying.")
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                 
                 # 1. Filename se specified words delete karo
                 if task:
@@ -727,3 +757,21 @@ async def text_handler(c, m):
         finally:
             await remove_active_batch(uid)
             Z.pop(uid, None)
+            
+            # 🟢 MEMORY LEAK FIX: Stop user client properly
+            if uid in UC:
+                try: 
+                    await UC[uid].stop()
+                except Exception as e: 
+                    pass
+                finally:
+                    UC.pop(uid, None)
+                    
+            # 🟢 DELETE REFERENCE VIDEO: Batch khatam hone par kachra saaf karo
+            ref_file = f"temp_reference_{uid}.mp4"
+            if os.path.exists(ref_file):
+                try:
+                    os.remove(ref_file)
+                    logger.info("🧹 Reference video deleted after batch completion.")
+                except Exception as e:
+                    logger.error(f"Failed to delete reference video: {e}")
