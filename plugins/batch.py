@@ -295,10 +295,22 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             
             if m.video or m.audio or m.document:
                 renamed_f = await rename_file(f, uid, p)
-                if original_ext and not renamed_f.lower().endswith(original_ext):
-                    corrected_name = renamed_f + original_ext
-                    os.rename(renamed_f, corrected_name)
-                    f = corrected_name
+                new_f_name = renamed_f
+                
+                # 1. Filename se specified words delete karo
+                if task:
+                    for word in task.get("remove_list", []):
+                        new_f_name = re.sub(re.escape(word), "", new_f_name, flags=re.IGNORECASE)
+                        
+                # 2. Topic Normalization (Dono strings ko ek standard format me merge karo)
+                new_f_name = re.sub(r'(?i)Number Of Digits', 'No. of Digit', new_f_name)
+                
+                if original_ext and not new_f_name.lower().endswith(original_ext):
+                    new_f_name += original_ext
+            
+                if new_f_name != renamed_f and os.path.exists(renamed_f):
+                    os.rename(renamed_f, new_f_name)
+                    f = new_f_name
                 else:
                     f = renamed_f
             
@@ -358,11 +370,20 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 if os.path.exists(f): os.remove(f)
                 return 'Failed (FloodWait).'
             except Exception as e:
+                logger.error(f"Upload failed for {f}: {e}")
                 await safe_status_edit(c, uid, p.id, f'Upload failed: {str(e)[:30]}')
-                if os.path.exists(f): os.remove(f)
+                if f and os.path.exists(f): 
+                    try: os.remove(f)
+                    except: pass
                 return 'Failed.'
             
-            os.remove(f)
+            # Safe Cleanup
+            if f and os.path.exists(f):
+                try:
+                    os.remove(f)
+                except Exception as e:
+                    logger.error(f"Failed to safely delete {f}: {e}")
+                    
             await c.delete_messages(uid, p.id)
             return 'Done.'
             
