@@ -199,15 +199,18 @@ async def save_user_data(user_id, key, value):
 async def download_youtube_video(url, uid):
     """
     YT-DLP ka use karke background me video download karega.
-    Agar YT_COOKIES di gayi hain, toh private videos bhi bypass karega.
+    Database se user ki cookies nikal kar use karega.
     """
-    from config import YT_COOKIES
+    from utils.db import get_user_cookie
     cookie_file = f"yt_cookies_{uid}.txt"
     
-    # Agar config me cookies set hain, toh temp file create karo
-    if YT_COOKIES and len(YT_COOKIES.strip()) > 10:
-        with open(cookie_file, "w") as f:
-            f.write(YT_COOKIES)
+    # DB se user ki cookies nikalna
+    cookies = await get_user_cookie(uid, "yt")
+            
+    if cookies:
+        # Yahan encoding="utf-8" add kiya gaya hai
+        with open(cookie_file, "w", encoding="utf-8") as f:
+            f.write(cookies)
             
     try:
         def _dl():
