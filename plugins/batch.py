@@ -277,10 +277,31 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 await c.delete_messages(uid, p.id)
                 return 'Done (YouTube)'
             else:
-                await safe_status_edit(c, uid, p.id, '❌ YouTube Download Failed. Skipping YT, forwarding normal text instead.')
+                await safe_status_edit(c, uid, p.id, '❌ YouTube Download Failed. Sending formatted link instead...')
+                
+                # Fail message structure
+                fail_msg = f"Link: {yt_url}\nError: [youtube] Video unavailable. This content isn't available, try again later."
+                
+                # Formatting check: Agar ━━━━━━━━━━━━━━━━━━━ pehle se hai toh uske andar insert karo
+                if "━━━━━━━━━━━━━━━━━━━" in ft:
+                    parts = ft.rsplit("━━━━━━━━━━━━━━━━━━━", 1)
+                    if len(parts) == 2:
+                        final_text = parts[0].strip() + f"\n{fail_msg}\n━━━━━━━━━━━━━━━━━━━"
+                    else:
+                        final_text = f"{ft}\n{fail_msg}"
+                else:
+                    # Agar border nahi hai toh naya border bana do
+                    final_text = f"━━━━━━━━━━━━━━━━━━━\n{ft.strip()}\n{fail_msg}\n━━━━━━━━━━━━━━━━━━━"
+                
+                # Target chat me direct message send kar do
+                try:
+                    await c.send_message(tcid, text=final_text, disable_web_page_preview=False, reply_to_message_id=rtmid)
+                except Exception as e:
+                    logger.error(f"Failed to send text fallback: {e}")
+                
                 await asyncio.sleep(2)
                 await c.delete_messages(uid, p.id)
-                orig_text = cleaned_text 
+                return 'Done (YouTube Link Sent)'
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         
         # 🟢 NORMAL TELEGRAM EXTRACTION LOGIC
