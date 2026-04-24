@@ -2,6 +2,7 @@ import concurrent.futures
 import time
 import os
 import re
+import yt_dlp
 import cv2
 import logging
 import asyncio
@@ -194,6 +195,54 @@ async def save_user_data(user_id, key, value):
         {"$set": {key: value}},
         upsert=True
     )
+
+async def download_youtube_video(url, uid):
+    """
+    YT-DLP ka use karke background me video download karega.
+    Agar YT_COOKIES di gayi hain, toh private videos bhi bypass karega.
+    """
+    from config import YT_COOKIES
+    cookie_file = f"yt_cookies_{uid}.txt"
+    
+    # Agar config me cookies set hain, toh temp file create karo
+    if YT_COOKIES and len(YT_COOKIES.strip()) > 10:
+        with open(cookie_file, "w") as f:
+            f.write(YT_COOKIES)
+            
+    try:
+        def _dl():
+            ydl_opts = {
+                'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                'merge_output_format': 'mp4', # Hamesha MP4 output aayega
+                'outtmpl': f'yt_download_{uid}_%(id)s.%(ext)s',
+                'quiet': True,
+                'no_warnings': True
+            }
+            if os.path.exists(cookie_file):
+                ydl_opts['cookiefile'] = cookie_file
+                
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                filename = ydl.prepare_filename(info)
+                # Handle possible extension change after post-processing
+                base, _ = os.path.splitext(filename)
+                for ext in ['.mp4', '.mkv', '.webm']:
+                    if os.path.exists(base + ext):
+                        return base + ext
+                return filename
+                
+        # Main event loop block na ho isliye isko alag thread me bhejo
+        file_path = await asyncio.to_thread(_dl)
+        return file_path
+        
+    except Exception as e:
+        logger.error(f"❌ YouTube Download Error: {e}")
+        return None
+    finally:
+        # Cache clean karna zaroori hai
+        if os.path.exists(cookie_file):
+            try: os.remove(cookie_file)
+            except: pass
 
 async def copy_header_and_repair(corrupt_file, reference_file):
     """Untrunc ka use karke good video ka header corrupt video me inject karega"""
