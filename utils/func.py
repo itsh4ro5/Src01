@@ -61,6 +61,13 @@ a11 = "aHR0cHM6Ly90Lm1lL0g0Ul9Db250YWN0X2JvdA=="
 # 🟢 CAPTION BEAUTIFIER
 def beautify_caption(text):
     if not text: return ""
+    
+    # Existing emojis ko clean karo taaki output me duplicate na ho
+    text = re.sub(r'[🎬📁🏷️👤🖥️📦🔢]', '', text)
+    
+    # Topic string standardization yahan bhi apply hogi
+    text = re.sub(r'(?i)Number Of Digits', 'No. of Digit', text)
+    
     replacements = {
         r"(?i)Index\s*:": "\n🔢 **Index:**",
         r"(?i)Title\s*:": "\n🎬 **Title:**",
@@ -72,10 +79,9 @@ def beautify_caption(text):
     }
     for pattern, new_text in replacements.items(): 
         text = re.sub(pattern, new_text, text)
+        
     text = re.sub(r'\n{3,}', '\n\n', text).strip()
-    if text: 
-        return f"━━━━━━━━━━━━━━━━━━━\n{text}\n━━━━━━━━━━━━━━━━━━━"
-    return ""
+    return f"━━━━━━━━━━━━━━━━━━━\n{text}\n━━━━━━━━━━━━━━━━━━━" if text else ""
 
 # 🟢 CUSTOM THUMBNAIL WATERMARKING (TEXT VIA PILLOW)
 async def generate_thumbnail(video_path, watermark, user_id):
