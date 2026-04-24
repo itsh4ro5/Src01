@@ -5,6 +5,7 @@ import time
 import asyncio
 import importlib
 import logging
+import uvloop
 import traceback
 from datetime import datetime
 from utils.func import premium_users_collection
@@ -20,14 +21,10 @@ logger = logging.getLogger(__name__)
 
 # 🟢 SPEED BOOST: Activate Ultra-Fast Async Engine
 try:
-    import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    print("⚡ uvloop activated! Async operations will run at max speed.")
-except ImportError:
-    print("⚠️ uvloop not installed. Standard asyncio will be used. (pip install uvloop)")
-
+    logger.info("⚡ uvloop forcefully activated for maximum download speeds.")
 from shared_client import start_client, app
 import utils.func as global_state
 
