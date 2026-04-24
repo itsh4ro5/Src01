@@ -65,10 +65,14 @@ def get_random_string(length=7):
     return ''.join(random.choice(characters) for _ in range(length)) 
  
  
-async def process_audio(client, event, url, cookies_env_var=None):
+async def process_audio(client, event, url, platform=None):
+    user_id = event.sender_id
     cookies = None
-    if cookies_env_var:
-        cookies = cookies_env_var
+    if platform:
+        cookies = await get_user_cookie(user_id, platform)
+        if not cookies:
+            await event.reply(f"**❌ Aapne {platform.upper()} ki cookies add nahi ki hain.**\nPehle cookies.txt file bhejkar `/addcookie {platform}` reply karein.")
+            return
  
     temp_cookie_path = None
     if cookies:
@@ -181,9 +185,9 @@ async def handler(event):
         await asyncio.sleep(delay_time)
 
         if "instagram.com" in url:
-            await process_audio(client, event, url, cookies_env_var="INSTA_COOKIES")
+            await process_audio(client, event, url, platform="insta")
         elif "youtube.com" in url or "youtu.be" in url:
-            await process_audio(client, event, url, cookies_env_var="YT_COOKIES")
+            await process_audio(client, event, url, platform="yt")
         else:
             await process_audio(client, event, url)
     except Exception as e:
@@ -245,9 +249,9 @@ async def handler(event):
         await asyncio.sleep(delay_time)
 
         if "instagram.com" in url:
-            await process_video(client, event, url, "INSTA_COOKIES", check_duration_and_size=False)
+            await process_video(client, event, url, "insta", check_duration_and_size=False)
         elif "youtube.com" in url or "youtu.be" in url:
-            await process_video(client, event, url, "YT_COOKIES", check_duration_and_size=True)
+            await process_video(client, event, url, "yt", check_duration_and_size=True)
         else:
             await process_video(client, event, url, None, check_duration_and_size=False)
  
@@ -322,20 +326,22 @@ def progress_callback(done, total, user_id):
  
     return final
  
-async def process_video(client, event, url, cookies_env_var, check_duration_and_size=False):
+async def process_video(client, event, url, platform, check_duration_and_size=False):
     start_time = time.time()
+    user_id = event.sender_id
     logger.info(f"Received link: {url}")
      
     cookies = None
-    if cookies_env_var:
-        cookies = cookies_env_var
+    if platform:
+        cookies = await get_user_cookie(user_id, platform)
+        if not cookies:
+            await event.reply(f"**❌ Aapne {platform.upper()} ki cookies add nahi ki hain.**\nPehle cookies.txt file bhejkar `/addcookie {platform}` reply karein.")
+            return
  
-     
     random_filename = get_random_string() + ".mp4"
     download_path = os.path.abspath(random_filename)
     logger.info(f"Generated random download path: {download_path}")
  
-     
     temp_cookie_path = None
     if cookies:
         with tempfile.NamedTemporaryFile(delete=False, mode='w', suffix='.txt') as temp_cookie_file:
