@@ -31,6 +31,15 @@ start_bot_safely()
 
 app = Flask(__name__)
 app.secret_key = "super_secret_key_change_me" 
+app.config['TEMPLATES_AUTO_RELOAD'] = True  # 🟢 FIX: Force HTML reload
+
+# 🟢 FIX: Browser ko cache save karne se rokne ka strict rule
+@app.after_request
+def add_header(r):
+    r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    r.headers["Pragma"] = "no-cache"
+    r.headers["Expires"] = "0"
+    return r
 
 # Sync MongoDB for Flask Backend
 try:
