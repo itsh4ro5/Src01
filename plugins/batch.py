@@ -226,7 +226,7 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # 🟢 SMART YOUTUBE INTERCEPTION LOGIC
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        yt_match = re.search(r'(https?://(?:www\.)?(?:youtube\.com|youtu\.be)[^\s]+)', orig_text)
+        ''''yt_match = re.search(r'(https?://(?:www\.)?(?:youtube\.com|youtu\.be)[^\s]+)', orig_text)
         
         if yt_match:
             yt_url = yt_match.group(1)
@@ -301,7 +301,7 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 
                 await asyncio.sleep(2)
                 await c.delete_messages(uid, p.id)
-                return 'Done (YouTube Link Sent)'
+                return 'Done (YouTube Link Sent)' '''
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         
         # 🟢 NORMAL TELEGRAM EXTRACTION LOGIC
