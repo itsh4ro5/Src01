@@ -11,6 +11,7 @@ import time
 import math
 from shared_client import client, app
 from telethon import events
+from utils.db import get_user_cookie
 from telethon.sync import TelegramClient
 from telethon.tl.types import DocumentAttributeVideo
 from utils.func import get_video_metadata, screenshot
