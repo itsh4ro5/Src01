@@ -24,8 +24,13 @@ async def handle_add_cookie(event):
     
     file_path = await reply_msg.download_media()
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            cookie_text = f.read()
+        # utf-8-sig hidden characters ko hata dega
+        with open(file_path, "r", encoding="utf-8-sig") as f:
+            cookie_text = f.read().strip() # .strip() extra spaces/lines hata dega
+            
+        # Agar header missing hai toh bot khud laga dega
+        if platform == "yt" and not cookie_text.startswith("#"):
+            cookie_text = "# Netscape HTTP Cookie File\n\n" + cookie_text
             
         await save_user_cookie(user_id, platform, cookie_text)
         await prog.edit(f"**✅ Aapki {platform.upper()} cookies successfully database me save ho gayi hain!**\nAb aap apne links download kar sakte hain.")
