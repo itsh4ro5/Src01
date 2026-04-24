@@ -3,7 +3,7 @@ import os
 from shared_client import client
 from utils.db import save_user_cookie 
 
-@client.on(events.NewMessage(pattern="/addcookie (yt|insta)"))
+@client.on(events.NewMessage(pattern="/setcookie (yt|insta)"))
 async def handle_add_cookie(event):
     user_id = event.sender_id
     platform = event.pattern_match.group(1) 
@@ -11,8 +11,8 @@ async def handle_add_cookie(event):
     if not event.is_reply:
         return await event.reply(
             "**❌ Error:** Kripya apni `cookies.txt` file bhejein, aur uspe reply karke likhein:\n"
-            "`/addcookie yt` (YouTube ke liye) ya\n"
-            "`/addcookie insta` (Instagram ke liye)"
+            "`/setcookie yt` (YouTube ke liye) ya\n"
+            "`/setcookie insta` (Instagram ke liye)"
         )
         
     reply_msg = await event.get_reply_message()
