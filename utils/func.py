@@ -216,10 +216,12 @@ async def download_youtube_video(url, uid):
         def _dl():
             ydl_opts = {
                 'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                'merge_output_format': 'mp4', # Hamesha MP4 output aayega
+                'merge_output_format': 'mp4',
                 'outtmpl': f'yt_download_{uid}_%(id)s.%(ext)s',
                 'quiet': True,
-                'no_warnings': True
+                'no_warnings': True,
+                'nocheckcertificate': True,  # Add kiya
+                'legacyserverconnect': True  # Add kiya
             }
             if os.path.exists(cookie_file):
                 ydl_opts['cookiefile'] = cookie_file
