@@ -76,7 +76,8 @@ async def process_audio(client, event, url, platform=None):
  
     temp_cookie_path = None
     if cookies:
-        with tempfile.NamedTemporaryFile(delete=False, mode='w', suffix='.txt') as temp_cookie_file:
+        # Yahan mode='w' ke aage encoding='utf-8' add kiya hai
+        with tempfile.NamedTemporaryFile(delete=False, mode='w', encoding='utf-8', suffix='.txt') as temp_cookie_file:
             temp_cookie_file.write(cookies)
             temp_cookie_path = temp_cookie_file.name
  
