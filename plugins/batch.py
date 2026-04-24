@@ -227,7 +227,74 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
 
     tcid = d
     rtmid = None
-    
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        # 🟢 SMART YOUTUBE INTERCEPTION LOGIC
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        yt_match = re.search(r'(https?://(?:www\.)?(?:youtube\.com|youtu\.be)[^\s]+)', orig_text)
+        
+        if yt_match:
+            yt_url = yt_match.group(1)
+            # 1. URL ko original text se hamesha ke liye uda do
+            cleaned_text = orig_text.replace(yt_url, '').strip()
+            
+            # 2. Text par tumhare Custom Rules (Replace/Delete) apply karo
+            proc_text = await process_text_with_rules(uid, cleaned_text)
+            user_cap = await get_user_data_key(uid, 'caption', '')
+            raw_caption = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
+            
+            if task:
+                for word in task.get("remove_list", []): raw_caption = re.sub(re.escape(word), "", raw_caption, flags=re.IGNORECASE)
+                for old, new in task.get("replace_dict", {}).items(): raw_caption = re.sub(re.escape(old), new, raw_caption, flags=re.IGNORECASE)
+            
+            # Topic Standardize karo
+            raw_caption = re.sub(r'(?i)Number Of Digits', 'No. of Digit', raw_caption)
+            
+            # Caption format
+            if not ("🎬 Title:" in raw_caption or "📁 Topic:" in raw_caption):
+                ft = beautify_caption(raw_caption)
+            else:
+                ft = raw_caption.strip()
+
+            p = await c.send_message(uid, '📥 YouTube Link Detected! Private video extract kar raha hu...')
+            
+            # 3. Video Download karo
+            from utils.func import download_youtube_video
+            yt_file = await download_youtube_video(yt_url, uid)
+            
+            if yt_file and os.path.exists(yt_file):
+                await safe_status_edit(c, uid, p.id, '📤 Uploading YouTube Video to Target Chat...')
+                th = await generate_thumbnail(yt_file, task.get("watermark", "") if task else "", uid)
+                mtd = await get_video_metadata(yt_file)
+                
+                try:
+                    # Target channel me YT video bhej do
+                    await c.send_video(
+                        tcid, video=yt_file, caption=ft, thumb=th, 
+                        width=mtd['width'], height=mtd['height'], duration=mtd['duration'], 
+                        reply_to_message_id=rtmid,
+                        progress=prog, progress_args=(c, uid, p.id, time.time(), "Uploading YT Video...")
+                    )
+                except FloodWait as fw:
+                    await safe_status_edit(c, uid, p.id, f'⚠️ FloodWait: Telegram blocked upload for {fw.value}s...')
+                    await asyncio.sleep(fw.value + 5)
+                except Exception as e:
+                    logger.error(f"Failed to upload YT video: {e}")
+                    
+                # Garbage collection
+                if os.path.exists(yt_file): os.remove(yt_file)
+                await c.delete_messages(uid, p.id)
+                return 'Done (YouTube)'
+            else:
+                await safe_status_edit(c, uid, p.id, '❌ YouTube Download Failed. Skipping YT, forwarding normal text instead.')
+                await asyncio.sleep(2)
+                await c.delete_messages(uid, p.id)
+                # Agar video private hone ki wajah se fail hoti hai (invalid cookies), toh link discard karke bacha hua normal text bhej dega.
+                orig_text = cleaned_text 
+        # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        
+        # 🟢 NORMAL TELEGRAM EXTRACTION LOGIC CONTINUES BELOW...
+        if m.media:
+            # ... (yahan se tumhara purana m.media wala code shuru hoga)
 
     try:
         if m.media:
