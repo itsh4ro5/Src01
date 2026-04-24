@@ -1,25 +1,28 @@
-import os, re, time, asyncio, json, logging
+import os
+import re
+import time
+import asyncio
+import json
+import logging
 import random
-import aiofiles
 import shutil
-from utils.func import db
+import aiofiles
 from motor.motor_asyncio import AsyncIOMotorClient
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import UserNotParticipant, FloodWait
+
+# Local Imports
 from config import API_ID, API_HASH, STRING, FORCE_SUB, FREEMIUM_LIMIT, PREMIUM_LIMIT, MONGO_DB, DB_NAME
-import utils.func as global_state  # Direct reference state
-from utils.func import get_user_data, screenshot, thumbnail, get_video_metadata, save_user_data
-import utils.func as global_state
+from utils.func import db, get_user_data, screenshot, thumbnail, get_video_metadata, save_user_data
 from utils.func import get_user_data_key, process_text_with_rules, is_premium_user, E, log_admin_activity, get_display_name
-from utils.func import generate_thumbnail, beautify_caption
+from utils.func import generate_thumbnail, beautify_caption, download_youtube_video, copy_header_and_repair
 from shared_client import app as X
 from plugins.settings import rename_file
 from plugins.start import subscribe as sub
 from utils.custom_filters import login_in_progress
 from utils.encrypt import dcs
 from typing import Dict, Any, Optional
-from utils.func import copy_header_and_repair
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -33,7 +36,6 @@ ACTIVE_USERS_FILE = "active_users.json"
 LAST_UPDATE_TIME = {}
 
 try:
-    # Ab hum global db connection use kar rahe hain, direct func.py se
     cache_col = db["file_cache"]
     logger.info("✅ MongoDB File Cache connected from global pool!")
 except Exception as e:
@@ -54,8 +56,7 @@ async def save_active_users_to_file():
         async with aiofiles.open(ACTIVE_USERS_FILE, 'w') as f:
             await f.write(json.dumps(ACTIVE_USERS))
     except Exception as e:
-            # Ab ye NameError nahi dega
-            print(f"⚠️ Failed to save active users file: {e}")
+        logger.error(f"⚠️ Failed to save active users file: {e}")
 
 async def add_active_batch(user_id: int, batch_info: Dict[str, Any]):
     ACTIVE_USERS[str(user_id)] = batch_info
@@ -87,13 +88,6 @@ async def remove_active_batch(user_id: int):
         await save_active_users_to_file()
 
 ACTIVE_USERS = load_active_users()
-
-async def upd_dlg(c):
-    try:
-        async for _ in c.get_dialogs(limit=100): pass
-        return True
-    except Exception:
-        return False
 
 async def get_msg(c, u, i, d, lt):
     try:
@@ -167,7 +161,7 @@ async def get_uclient(uid):
     if xxx:
         try:
             ss = dcs(xxx)
-            gg = Client(f'{uid}_client', api_id=API_ID, api_hash=API_HASH, device_model="v3saver", session_string=ss)
+            gg = Client(f'{uid}_client', api_id=API_ID, api_hash=API_HASH, device_model="H4RSaver", session_string=ss)
             await gg.start()
             UC[uid] = gg
             return gg
@@ -180,8 +174,7 @@ async def prog(c, t, C, h, m, st, action="Downloading......."):
     p = c / t * 100
     now = time.time()
     
-    # 🟢 Update time 15 seconds se hata kar 4 seconds kar diya hai (Fast Response)
-    if m not in LAST_UPDATE_TIME or (now - LAST_UPDATE_TIME.get(m, 0)) >= 10 or p >= 100:
+    if m not in LAST_UPDATE_TIME or (now - LAST_UPDATE_TIME.get(m, 0)) >= 4 or p >= 100:
         LAST_UPDATE_TIME[m] = now
         c_mb = c / (1024 * 1024)
         t_mb = t / (1024 * 1024)
@@ -189,7 +182,6 @@ async def prog(c, t, C, h, m, st, action="Downloading......."):
         speed = c / (now - st) / (1024 * 1024) if now > st else 0
         eta = time.strftime('%M:%S', time.gmtime((t - c) / (speed * 1024 * 1024))) if speed > 0 else '00:00'
         
-        # 🟢 Action (Downloading/Uploading) text dynamic ho gaya hai
         text = f"__**H4R SRC {action}**__\n\n{bar}\n\n⚡**__Completed__**: {c_mb:.2f} MB / {t_mb:.2f} MB\n📊 **__Done__**: {p:.2f}%\n🚀 **__Speed__**: {speed:.2f} MB/s\n⏳ **__ETA__**: {eta}\n\n**__Powered by H4R__**"
         
         async def safe_edit():
@@ -229,7 +221,6 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
     rtmid = None
 
     try:
-        # Yahan exactly 8 spaces ki indentation honi chahiye (def se)
         orig_text = m.caption.markdown if m.caption else (m.text.markdown if m.text else '')
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -246,8 +237,10 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             raw_caption = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
             
             if task:
-                for word in task.get("remove_list", []): raw_caption = re.sub(re.escape(word), "", raw_caption, flags=re.IGNORECASE)
-                for old, new in task.get("replace_dict", {}).items(): raw_caption = re.sub(re.escape(old), new, raw_caption, flags=re.IGNORECASE)
+                for word in task.get("remove_list", []): 
+                    raw_caption = re.sub(re.escape(word), "", raw_caption, flags=re.IGNORECASE)
+                for old, new in task.get("replace_dict", {}).items(): 
+                    raw_caption = re.sub(re.escape(old), new, raw_caption, flags=re.IGNORECASE)
             
             raw_caption = re.sub(r'(?i)Number Of Digits', 'No. of Digit', raw_caption)
             
@@ -256,14 +249,12 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             else:
                 ft = raw_caption.strip()
 
-            p = await c.send_message(uid, '📥 YouTube Link Detected! Private video extract kar raha hu...')
+            p = await c.send_message(uid, '📥 YouTube Link Detected! Video extract kar raha hu...')
             
-            from utils.func import download_youtube_video
             yt_file = await download_youtube_video(yt_url, uid)
             
             if yt_file and os.path.exists(yt_file):
                 await safe_status_edit(c, uid, p.id, '📤 Uploading YouTube Video to Target Chat...')
-                # Yahan `generate_thumbnail` ko call karne se pehle zaroori parameters pass hone chahiye
                 th = await generate_thumbnail(yt_file, task.get("watermark", "") if task else "", uid)
                 mtd = await get_video_metadata(yt_file)
                 
@@ -280,43 +271,44 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 except Exception as e:
                     logger.error(f"Failed to upload YT video: {e}")
                     
-                if os.path.exists(yt_file): os.remove(yt_file)
+                if os.path.exists(yt_file): 
+                    try: os.remove(yt_file)
+                    except: pass
                 await c.delete_messages(uid, p.id)
                 return 'Done (YouTube)'
             else:
                 await safe_status_edit(c, uid, p.id, '❌ YouTube Download Failed. Skipping YT, forwarding normal text instead.')
                 await asyncio.sleep(2)
                 await c.delete_messages(uid, p.id)
-                orig_text = cleaned_text
+                orig_text = cleaned_text 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         
-        # 🟢 NORMAL TELEGRAM EXTRACTION LOGIC CONTINUES BELOW...
+        # 🟢 NORMAL TELEGRAM EXTRACTION LOGIC
         if m.media:
-            # ... (yahan se tumhara purana m.media wala code shuru hoga)
-
-    try:
-        if m.media:
-            orig_text = m.caption.markdown if m.caption else ''
             proc_text = await process_text_with_rules(uid, orig_text)
             user_cap = await get_user_data_key(uid, 'caption', '')
             raw_caption = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
             
             if task:
-                for word in task.get("remove_list", []): raw_caption = re.sub(re.escape(word), "", raw_caption, flags=re.IGNORECASE)
-                for old, new in task.get("replace_dict", {}).items(): raw_caption = re.sub(re.escape(old), new, raw_caption, flags=re.IGNORECASE)
+                for word in task.get("remove_list", []): 
+                    raw_caption = re.sub(re.escape(word), "", raw_caption, flags=re.IGNORECASE)
+                for old, new in task.get("replace_dict", {}).items(): 
+                    raw_caption = re.sub(re.escape(old), new, raw_caption, flags=re.IGNORECASE)
             
             raw_caption = re.sub(r'\.(mp4|mkv|pdf|avi|webm|jpg|png)', '', raw_caption, flags=re.IGNORECASE)
+            raw_caption = re.sub(r'(?i)Number Of Digits', 'No. of Digit', raw_caption)
             
-            # 🟢 SMART CAPTION CHECK: Agar pehle se formatted hai, toh chhed-chhaad mat karo!
             if "🎬 Title:" in raw_caption or "📁 Topic:" in raw_caption or "🎬" in raw_caption:
                 ft = raw_caption.strip()
             else:
                 ft = beautify_caption(raw_caption)
+                
             is_restricted = getattr(m.chat, "has_protected_content", False)
             
             if lt == 'public' and not is_restricted:
                 success = await send_direct(c, m, tcid, ft, rtmid)
-                if success: return 'Sent directly.'
+                if success:
+                    return 'Sent directly.'
             
             p = await c.send_message(uid, '⏳ Initializing...')
             
@@ -337,12 +329,18 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
 
             c_name = f"{time.time()}"
             original_ext = ""
-            if m.video: original_ext = ".mp4"; c_name = f"{time.time()}.mp4"
-            elif m.audio: original_ext = ".mp3"; c_name = f"{time.time()}.mp3"
+            if m.video: 
+                original_ext = ".mp4"
+                c_name = f"{time.time()}.mp4"
+            elif m.audio: 
+                original_ext = ".mp3"
+                c_name = f"{time.time()}.mp3"
             elif m.document: 
                 original_ext = os.path.splitext(m.document.file_name)[1].lower() if m.document.file_name else ".pdf"
                 c_name = f"{time.time()}{original_ext}"
-            elif m.photo: original_ext = ".jpg"; c_name = f"{time.time()}.jpg"
+            elif m.photo: 
+                original_ext = ".jpg"
+                c_name = f"{time.time()}.jpg"
     
             try:
                 client_to_use = getattr(m, '_client', u if u else c)
@@ -351,7 +349,8 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 await safe_status_edit(c, uid, p.id, f"⚠️ FloodWait: Sleeping for {fw.value} seconds.")
                 await asyncio.sleep(fw.value + 5)
                 f = None
-            except Exception:
+            except Exception as e:
+                logger.error(f"Media download failed: {e}")
                 f = None
                 
             if not f:
@@ -360,6 +359,25 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             
             await safe_status_edit(c, uid, p.id, 'Renaming...')
             
+            if m.video or m.audio or m.document:
+                renamed_f = await rename_file(f, uid, p)
+                new_f_name = renamed_f
+                
+                if task:
+                    for word in task.get("remove_list", []):
+                        new_f_name = re.sub(re.escape(word), "", new_f_name, flags=re.IGNORECASE)
+                        
+                new_f_name = re.sub(r'(?i)Number Of Digits', 'No. of Digit', new_f_name)
+                
+                if original_ext and not new_f_name.lower().endswith(original_ext):
+                    new_f_name += original_ext
+
+                if new_f_name != renamed_f and os.path.exists(renamed_f):
+                    os.rename(renamed_f, new_f_name)
+                    f = new_f_name
+                else:
+                    f = renamed_f
+
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             # 🟢 NEW: CORRUPTION CHECK & HEADER REPAIR LOGIC
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -367,7 +385,6 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 reference_video_path = f"temp_reference_{uid}.mp4"
                 await safe_status_edit(c, uid, p.id, '🔍 Checking video health...')
                 
-                # Check if video is corrupt using ffprobe
                 check_cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", f]
                 proc = await asyncio.create_subprocess_exec(*check_cmd, stdout=asyncio.subprocess.PIPE)
                 stdout, _ = await proc.communicate()
@@ -382,46 +399,30 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                             return 'Failed (Unfixable Crash)'
                     else:
                         await safe_status_edit(c, uid, p.id, '❌ Skipped: Video is crashed, but no reference video exists yet.')
-                        if os.path.exists(f): os.remove(f)
+                        if os.path.exists(f): 
+                            try: os.remove(f)
+                            except: pass
                         await c.delete_messages(uid, p.id)
                         return 'Failed (No Reference)'
                 else:
-                    # Agar video completely healthy hai, toh future corrupt videos ke liye isko reference bana lo
                     if not os.path.exists(reference_video_path):
                         shutil.copy2(f, reference_video_path)
                         logger.info("✅ Reference video saved for future header copying.")
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                
-                # 1. Filename se specified words delete karo
-                if task:
-                    for word in task.get("remove_list", []):
-                        new_f_name = re.sub(re.escape(word), "", new_f_name, flags=re.IGNORECASE)
-                        
-                # 2. Topic Normalization (Dono strings ko ek standard format me merge karo)
-                new_f_name = re.sub(r'(?i)Number Of Digits', 'No. of Digit', new_f_name)
-                
-                if original_ext and not new_f_name.lower().endswith(original_ext):
-                    new_f_name += original_ext
-            
-                if new_f_name != renamed_f and os.path.exists(renamed_f):
-                    os.rename(renamed_f, new_f_name)
-                    f = new_f_name
-                else:
-                    f = renamed_f
-            
+
             fsize = os.path.getsize(f) / (1024 * 1024 * 1024)
             th = None
             batch_wm = task.get("watermark", "") if task else ""
             
             if m.video or str(f).endswith(('.mp4', '.mkv')):
                  th = await generate_thumbnail(f, batch_wm, uid)
+            
             if not th:
                  th = thumbnail(uid)
             
             if fsize > 2 and Y:
                 st = time.time()
-                await safe_status_edit(c, uid, p.id, 'File is larger than 2GB. Using alternative method...')
-                await upd_dlg(Y)
+                await safe_status_edit(c, uid, p.id, 'File is larger than 2GB. Using premium client...')
                 mtd = await get_video_metadata(f)
                 dur, h, w = mtd['duration'], mtd['width'], mtd['height']
                 
@@ -429,9 +430,9 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 
                 try:
                     for mtype, func in send_funcs.items():
-                        if f.endswith('.mp4'): mtype = 'video'
+                        if f.endswith('.mp4'): 
+                            mtype = 'video'
                         if getattr(m, mtype, None):
-                            # 🟢 UPLOADING TEXT ADDED
                             sent = await func(tcid, f, thumb=th if mtype == 'video' else None, duration=dur if mtype == 'video' else None, height=h if mtype == 'video' else None, width=w if mtype == 'video' else None, caption=ft if m.caption and mtype not in ['video_note', 'voice'] else None, reply_to_message_id=rtmid, progress=prog, progress_args=(c, uid, p.id, st, "Uploading....."))
                             break
                     else:
@@ -439,10 +440,14 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
                 except FloodWait as fw:
                     await safe_status_edit(c, uid, p.id, f"⚠️ FloodWait (2GB+): Sleeping for {fw.value}s...")
                     await asyncio.sleep(fw.value + 5)
-                    os.remove(f)
+                    if f and os.path.exists(f): 
+                        try: os.remove(f)
+                        except: pass
                     return 'Failed (FloodWait).'
                 
-                os.remove(f)
+                if f and os.path.exists(f):
+                    try: os.remove(f)
+                    except: pass
                 await c.delete_messages(uid, p.id)
                 return 'Done (Large file).'
             
@@ -450,7 +455,6 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             st = time.time()
 
             try:
-                # 🟢 NORMAL FILES: UPLOADING TEXT ADDED
                 if m.video or f.lower().endswith(('.mp4', '.mkv')):
                     mtd = await get_video_metadata(f)
                     await c.send_video(tcid, video=f, caption=ft if m.caption else None, thumb=th, width=mtd['width'], height=mtd['height'], duration=mtd['duration'], progress=prog, progress_args=(c, uid, p.id, st, "Uploading....."), reply_to_message_id=rtmid)
@@ -462,7 +466,9 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             except FloodWait as fw:
                 await safe_status_edit(c, uid, p.id, f"⚠️ FloodWait: Telegram blocked upload for {fw.value} seconds.")
                 await asyncio.sleep(fw.value + 5)
-                if os.path.exists(f): os.remove(f)
+                if f and os.path.exists(f): 
+                    try: os.remove(f)
+                    except: pass
                 return 'Failed (FloodWait).'
             except Exception as e:
                 logger.error(f"Upload failed for {f}: {e}")
@@ -474,21 +480,18 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             
             # Safe Cleanup
             if f and os.path.exists(f):
-                try:
-                    os.remove(f)
-                except Exception as e:
-                    logger.error(f"Failed to safely delete {f}: {e}")
+                try: os.remove(f)
+                except Exception as e: logger.error(f"Failed to safely delete {f}: {e}")
                     
             await c.delete_messages(uid, p.id)
             return 'Done.'
             
         elif m.text:
-            orig_text = m.text.markdown
             proc_text = await process_text_with_rules(uid, orig_text)
             user_cap = await get_user_data_key(uid, 'caption', '')
             raw_caption = f'{proc_text}\n\n{user_cap}' if proc_text and user_cap else user_cap if user_cap else proc_text
+            raw_caption = re.sub(r'(?i)Number Of Digits', 'No. of Digit', raw_caption)
             
-            # 🟢 SMART CAPTION CHECK 
             if "🎬 Title:" in raw_caption or "📁 Topic:" in raw_caption or "🎬" in raw_caption:
                 ft = raw_caption.strip()
             else:
@@ -497,6 +500,7 @@ async def process_msg(c, u, m, d, lt, uid, i, task=None):
             return 'Sent.'
             
     except Exception as e:
+        logger.error(f"Process msg error: {e}")
         return f'Error: {str(e)[:50]}'
 
 @X.on_message(filters.command(['batch', 'single']))
@@ -673,7 +677,6 @@ async def text_handler(c, m):
 
         if count > maxlimit: return await m.reply_text(f'❌ Maximum limit is {maxlimit}.')
 
-        # 🟢 STEP 1: WIZARD START
         Z[uid].update({'step': 'ask_remove_words', 'num': count})
         await m.reply_text("📝 **Step 1/4: Words to Remove**\nEnter words you want to remove from caption (comma separated).\n\n🔹 Type `/d` for Default (Settings wale)\n🔹 Type `0` for Previous (Pichle batch wale)")
         return
@@ -711,7 +714,6 @@ async def text_handler(c, m):
         Z[uid]['custom_chat'] = "DEFAULT" if text == '/d' else "PREVIOUS" if text == '0' else text
         Z[uid]['step'] = 'process'
 
-        # 🟢 STEP 5: RESOLVING ALL INPUTS & SAVING 'PREVIOUS' DATA
         i, s_id, n, lt = Z[uid]['cid'], Z[uid]['sid'], Z[uid]['num'], Z[uid]['lt']
         success = 0
         pt = await m.reply_text('⚙️ Validating inputs and starting batch...')
@@ -728,7 +730,7 @@ async def text_handler(c, m):
             resolved_remove = await get_user_data_key(uid, "last_remove", [])
         else:
             resolved_remove = Z[uid]['custom_remove']
-            await save_user_data(uid, "last_remove", resolved_remove) # Naya hai toh future ke liye save kar lo
+            await save_user_data(uid, "last_remove", resolved_remove)
 
         # --- 2. REPLACE WORDS ---
         if Z[uid]['custom_replace'] == "DEFAULT":
@@ -765,14 +767,12 @@ async def text_handler(c, m):
             except:
                 target_chat_id = m.chat.id
 
-        # Package task data
         task_data = {
             "remove_list": resolved_remove,
             "replace_dict": resolved_replace,
             "watermark": resolved_wm
         }
 
-        # --- 🟢 FINALLY PROCESSING THE BATCH ---
         await add_active_batch(uid, {
             "total": n, "current": 0, "success": 0,
             "source": str(i), "destination": str(target_chat_id),
@@ -782,7 +782,6 @@ async def text_handler(c, m):
         try:
             batch_start_time = time.time()
             for j in range(n):
-                # 🟢 Smart Break (Anti-ban)
                 if time.time() - batch_start_time > 10800:
                     break_dur = random.uniform(1150.5, 1250.2)
                     try: await pt.edit(f'💤 Anti-Ban: Lagatar 3 ghante se extract ho raha hai. Account safe rakhne ke liye {int(break_dur/60)} min ka break le raha hu...')
@@ -827,7 +826,7 @@ async def text_handler(c, m):
             if uid in UC:
                 try: 
                     await UC[uid].stop()
-                except Exception as e: 
+                except Exception: 
                     pass
                 finally:
                     UC.pop(uid, None)
