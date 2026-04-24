@@ -195,6 +195,33 @@ async def save_user_data(user_id, key, value):
         upsert=True
     )
 
+async def copy_header_and_repair(corrupt_file, reference_file):
+    """Untrunc ka use karke good video ka header corrupt video me inject karega"""
+    if not os.path.exists(corrupt_file) or not os.path.exists(reference_file):
+        return None
+        
+    logger.info(f"🛠 Fixing Corrupted Video using reference header: {reference_file}")
+    fixed_file = f"{corrupt_file}_fixed.mp4"
+    
+    try:
+        # untrunc command execute hogi
+        proc = await asyncio.create_subprocess_exec(
+            "untrunc", reference_file, corrupt_file,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        await proc.wait()
+        
+        # Agar repair successful raha toh purani corrupt file delete karke fixed file return karega
+        if os.path.exists(fixed_file) and os.path.getsize(fixed_file) > 1024:
+            os.remove(corrupt_file)
+            os.rename(fixed_file, corrupt_file)
+            return corrupt_file
+        else:
+            return None
+    except Exception as e:
+        logger.error(f"❌ Header Copy Repair Failed: {e}")
+        return None
+
 async def get_user_data_key(user_id, key, default=None):
     user_data = await users_collection.find_one({"user_id": int(user_id)})
     return user_data.get(key, default) if user_data else default
