@@ -92,6 +92,8 @@ async def process_audio(client, event, url, platform=None):
         'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
         'quiet': False,
         'noplaylist': True,
+        'nocheckcertificate': True,     # SSL error bypass
+        'legacyserverconnect': True,    # Connection drop bypass
     }
     prog = None
  
@@ -128,9 +130,6 @@ async def process_audio(client, event, url, platform=None):
                 audio_file.save()
  
             await asyncio.to_thread(edit_metadata)
- 
-         
- 
          
         chat_id = event.chat_id
         if os.path.exists(download_path):
@@ -146,11 +145,11 @@ async def process_audio(client, event, url, platform=None):
             if prog:
                 await prog.delete()
         else:
-            await event.reply("**__Audio file not found after extraction!__**")
+            await event.reply(f"**❌ Server blocked the download (IP/SSL Error).**\n\n**🎧 Direct Link se sunein:**\n{url}")
  
     except Exception as e:
         logger.exception("Error during audio extraction or upload")
-        await event.reply(f"**__An error occurred: {e}__**")
+        await event.reply(f"**❌ Audio extract fail ho gaya.**\n\n**🎧 Direct Link se sunein:**\n{url}")
     finally:
         if os.path.exists(download_path):
             os.remove(download_path)
@@ -361,6 +360,8 @@ async def process_video(client, event, url, platform, check_duration_and_size=Fa
         'cookiefile': temp_cookie_path if temp_cookie_path else None,
         'writethumbnail': True,
         'verbose': True,
+        'nocheckcertificate': True,     # SSL error bypass
+        'legacyserverconnect': True,    # Connection drop bypass
     }
     prog = None
     progress_message = await event.reply("**__Starting download...__**")
@@ -429,10 +430,10 @@ async def process_video(client, event, url, platform, check_duration_and_size=Fa
             if prog:
                 await prog.delete()
         else:
-            await event.reply("**__File not found after download. Something went wrong!__**")
+            await event.reply(f"**❌ Server blocked the download (IP/SSL Error).**\n\n**🎥 Direct Link se dekhein:**\n{url}")
     except Exception as e:
         logger.exception("An error occurred during download or upload.")
-        await event.reply(f"**__An error occurred: {e}__**")
+        await event.reply(f"**❌ Video download fail ho gaya.**\n\n**🎥 Direct Link se dekhein:**\n{url}")
     finally:
          
         if os.path.exists(download_path):
