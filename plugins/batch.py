@@ -30,6 +30,7 @@ logging.getLogger("pyrogram.session.session").setLevel(logging.ERROR)
 
 Y = None if not STRING else __import__('shared_client').userbot
 Z, P, UB, UC = {}, {}, {}, {}
+FIX_DATA = {}
 
 ACTIVE_USERS = {}
 ACTIVE_USERS_FILE = "active_users.json"
@@ -174,7 +175,7 @@ async def prog(c, t, C, h, m, st, action="Downloading......."):
     p = c / t * 100
     now = time.time()
     
-    if m not in LAST_UPDATE_TIME or (now - LAST_UPDATE_TIME.get(m, 0)) >= 4 or p >= 100:
+    if m not in LAST_UPDATE_TIME or (now - LAST_UPDATE_TIME.get(m, 0)) >= 11 or p >= 100:
         LAST_UPDATE_TIME[m] = now
         c_mb = c / (1024 * 1024)
         t_mb = t / (1024 * 1024)
@@ -860,3 +861,67 @@ async def text_handler(c, m):
                     logger.info("🧹 Reference video deleted after batch completion.")
                 except Exception as e:
                     logger.error(f"Failed to delete reference video: {e}")
+
+@X.on_message(filters.command("fix") & filters.private)
+    async def fix_command_handler(c, m):
+        uid = m.from_user.id
+        FIX_DATA[uid] = {"step": "await_corrupt"}
+        await m.reply_text("📁 **Manual Repair Mode ON**\n\nAb wo **Corrupted Video** bhejen jise fix karna hai.")
+
+    @X.on_message(filters.video & filters.private)
+    async def manual_fix_media_handler(c, m):
+        uid = m.from_user.id
+        if uid not in FIX_DATA:
+            return # Normal video handling if not in fix mode
+
+        step = FIX_DATA[uid].get("step")
+
+        if step == "await_corrupt":
+            FIX_DATA[uid]["corrupt_msg"] = m
+            FIX_DATA[uid]["caption"] = m.caption.markdown if m.caption else ""
+            FIX_DATA[uid]["step"] = "await_reference"
+            await m.reply_text("✅ Corrupted video received.\n\nAb wo **Reference Video** bhejen jiska header copy karna hai.")
+
+        elif step == "await_reference":
+            status = await m.reply_text("⏳ Repairing process started...")
+            
+            corrupt_msg = FIX_DATA[uid]["corrupt_msg"]
+            ref_msg = m
+            caption = FIX_DATA[uid]["caption"]
+
+            corrupt_path = f"manual_corrupt_{uid}.mp4"
+            ref_path = f"manual_ref_{uid}.mp4"
+
+            try:
+                await status.edit_text("📥 Downloading Corrupted Video...")
+                c_file = await corrupt_msg.download(file_name=corrupt_path)
+                
+                await status.edit_text("📥 Downloading Reference Video...")
+                r_file = await ref_msg.download(file_name=ref_path)
+
+                await status.edit_text("🛠 Repairing video...")
+                fixed_file = await copy_header_and_repair(c_file, r_file)
+
+                if fixed_file and os.path.exists(fixed_file):
+                    await status.edit_text("📤 Uploading Fixed Video...")
+                    mtd = await get_video_metadata(fixed_file)
+                    
+                    await c.send_video(
+                        chat_id=m.chat.id,
+                        video=fixed_file,
+                        caption=caption,
+                        width=mtd['width'],
+                        height=mtd['height'],
+                        duration=mtd['duration']
+                    )
+                    await status.delete()
+                else:
+                    await status.edit_text("❌ Repair Failed! Reference video match nahi ho raha hai.")
+
+            except Exception as e:
+                await status.edit_text(f"❌ Error: {str(e)}")
+            
+            finally:
+                for f in [corrupt_path, ref_path]:
+                    if os.path.exists(f): os.remove(f)
+                FIX_DATA.pop(uid, None)
